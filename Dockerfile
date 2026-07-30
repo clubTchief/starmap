@@ -7,42 +7,27 @@ RUN mvn dependency:go-offline -q
 COPY src ./src
 RUN mvn package -DskipTests -q
 
-# ── Stage 2: Orekit data fetcher ──────────────────────────────────────────────
-# Download orekit-data + DE440 in a separate stage so the layer is cached
-FROM alpine:3.19 AS data-fetcher
-
-RUN apk add --no-cache wget unzip
-
-WORKDIR /orekit-data
-
-# 1. Download the standard orekit-data package (IERS, UTC-TAI, EOP, gravity)
-RUN wget -q "https://gitlab.orekit.org/orekit/orekit-data/-/archive/master/orekit-data-master.zip" \
-    -O orekit-data.zip && \
-    unzip -q orekit-data.zip && \
-    cp -r orekit-data-master/. . && \
-    rm -rf orekit-data-master orekit-data.zip
-
-# 2. Download DE440 ephemeris binary from NASA JPL
-#    de440.bsp covers 1849–2150, ~114MB — Orekit 12.x uses this by default
-RUN wget -q "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440.bsp" \
-    -O de440.bsp && \
-    echo "DE440 downloaded: $(du -sh de440.bsp)"
-
-# ── Stage 3: Runtime ──────────────────────────────────────────────────────────
+# ── Stage 2: Runtime ──────────────────────────────────────────────────────────
 FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
-RUN apk add --no-cache wget
+RUN apk add --no-cache wget curl
 
 RUN addgroup -S starmap && adduser -S starmap -G starmap
 
-# Copy the fat JAR from build stage
 COPY --from=builder --chown=starmap:starmap \
      /build/target/starmap-1.0.0.jar app.jar
 
-# Copy complete orekit-data (including DE440) from data-fetcher stage
-COPY --from=data-fetcher --chown=starmap:starmap \
-     /orekit-data ./orekit-data
+# Copy the orekit-data folder committed to the repo (UTC-TAI, IERS, EOP etc)
+COPY --chown=starmap:starmap orekit-data ./orekit-data
+
+# Download DE440 from NASA JPL at build time
+# This is the only file too large to commit — ~114MB
+RUN wget --timeout=600 -q \
+    "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440.bsp" \
+    -O /app/orekit-data/de440.bsp && \
+    echo "DE440 downloaded: $(du -sh /app/orekit-data/de440.bsp)" && \
+    chown starmap:starmap /app/orekit-data/de440.bsp
 
 USER starmap
 
