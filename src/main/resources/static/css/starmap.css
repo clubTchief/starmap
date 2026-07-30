@@ -1,0 +1,687 @@
+
+    /* ── GNSS Tracker styles ── */
+
+    /* ================================================================
+       DESIGN SYSTEM
+       Palette : #0a0e14 base · #0d1520 panel · #00e5ff cyan accent
+                 #39ff14 lime signal · #ff4d6d red alert · #7c83fd violet ECI
+       Type    : "JetBrains Mono" data · "Inter" labels  (CDN)
+       Signature: Skyplot compass ring — the one truly bespoke element
+    ================================================================ */
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;500;700&family=Inter:wght@300;500;700&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --base:    #0a0e14;
+      --panel:   #0d1a26;
+      --border:  #253545;
+      --cyan:    #00e5ff;
+      --lime:    #39ff14;
+      --violet:  #7c83fd;
+      --amber:   #ffb300;
+      --red:     #ff4d6d;
+      --text:    #dde8f0;
+      --muted:   #7a9ab0;
+      --mono:    'JetBrains Mono', monospace;
+      --sans:    'Inter', sans-serif;
+      --radius:  6px;
+    }
+
+    html, body { width: 100%; height: 100%; overflow: hidden;
+                 background: var(--base); color: var(--text);
+                 font-family: var(--sans); font-size: 13px; }
+
+    /* ---------- Globe ---------- */
+    #cesiumContainer { position: absolute; inset: 0; }
+
+    /* ---------- Top bar ---------- */
+    #topbar {
+      position: absolute; top: 48px; left: 320px; right: 320px;
+      height: 44px;
+      background: linear-gradient(90deg, rgba(0,229,255,.12), transparent 60%);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 16px;
+      padding: 0 16px; z-index: 100;
+      backdrop-filter: blur(10px);
+    }
+    #topbar .logo {
+      font-family: var(--mono); font-weight: 700; font-size: 15px;
+      color: var(--cyan); letter-spacing: 3px; white-space: nowrap;
+    }
+    #topbar .utc-clock {
+      font-family: var(--mono); font-size: 14px; color: var(--lime);
+      letter-spacing: 1px; margin-left: auto;
+    }
+    #topbar .source-badge {
+      font-family: var(--mono); font-size: 10px; padding: 3px 8px;
+      border-radius: 3px; border: 1px solid var(--cyan);
+      color: var(--cyan); background: rgba(0,229,255,.08);
+      white-space: nowrap;
+    }
+    #topbar .source-badge.sim { border-color: var(--amber); color: var(--amber); background: rgba(255,179,0,.08); }
+
+    /* ---------- Tab nav ---------- */
+    #tab-nav {
+      position: absolute; top: 44px; right: 0; width: 320px;
+      display: flex; border-bottom: 1px solid var(--border);
+      z-index: 100; background: var(--panel);
+    }
+    .tab-btn {
+      flex: 1; padding: 8px 4px; font-size: 9.5px; font-family: var(--mono);
+      font-weight: 500; letter-spacing: 1px; text-transform: uppercase;
+      background: none; border: none; color: var(--muted); cursor: pointer;
+      border-bottom: 2px solid transparent; transition: all .2s;
+    }
+    .tab-btn.active  { color: var(--cyan); border-bottom-color: var(--cyan); }
+    .tab-btn:hover:not(.active) { color: var(--text); }
+
+    /* ---------- Right panel ---------- */
+    #right-panel {
+      position: absolute; top: 44px; right: 0; width: 320px;
+      bottom: 0; background: rgba(13,26,38,.97);
+      border-left: 1px solid var(--border);
+      overflow-y: auto; z-index: 99;
+      scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+    }
+
+    /* ---------- Tab pane ---------- */
+    .tab-pane { display: none; padding: 12px; }
+    .tab-pane.active { display: block; }
+
+    /* ---------- Cards ---------- */
+    .card {
+      background: rgba(255,255,255,.03);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px; margin-bottom: 10px;
+    }
+    .card-title {
+      font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
+      color: #9ab8c8; font-family: var(--mono); margin-bottom: 10px;
+    }
+
+    /* ---------- KV grid ---------- */
+    .kv { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px; }
+    .kv-item label { font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: #8aabb8; display: block; }
+    .kv-item span  { font-family: var(--mono); font-size: 12px; color: var(--cyan); font-weight: 500; }
+
+    /* Signal overview — single column vertical stack */
+    #sig-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    #sig-grid .kv-item label { color: inherit; }
+    #sig-grid .kv-item span,
+    #sig-grid .kv-item span span { color: inherit; font-size: inherit; }
+
+    /* ---------- Fix quality ---------- */
+    .fix-badge {
+      display: inline-block; padding: 2px 10px; border-radius: 3px;
+      font-family: var(--mono); font-size: 10px; font-weight: 700;
+      letter-spacing: 1px;
+    }
+    .fix-none  { background: rgba(255,77,109,.15); color: var(--red); border: 1px solid var(--red); }
+    .fix-gps   { background: rgba(57,255,20,.1);  color: var(--lime); border: 1px solid var(--lime); }
+    .fix-dgps  { background: rgba(0,229,255,.1);  color: var(--cyan); border: 1px solid var(--cyan); }
+
+    /* ================================================================
+       SKY PLOT — SIGNATURE ELEMENT
+    ================================================================ */
+    #skyplot-wrap { position: relative; width: 100%; padding-bottom: 100%; }
+    #skyplot-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+    /* ---------- Satellite list ---------- */
+    .sat-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,.04);
+      font-family: var(--mono); font-size: 11px;
+    }
+    .sat-prn  { width: 38px; font-weight: 700; letter-spacing: .5px; flex-shrink: 0; }
+    .sat-prn.prn-G { color: #00e5ff; }
+    .sat-prn.prn-R { color: #8899aa; }
+    .sat-prn.prn-E { color: #00c896; }
+    .sat-prn.prn-B { color: #ff7a00; }
+    .sat-prn.prn-Q { color: #cc44ff; }
+    .sat-prn.prn-I { color: #ffee44; }
+    .sat-prn.prn-S { color: #aaaaaa; }
+    .sat-bar  { flex: 1; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+    .sat-bar-fill { height: 100%; border-radius: 3px; transition: width .5s; }
+    .snr-hi   { background: var(--lime); }
+    .snr-mid  { background: var(--cyan); }
+    .snr-lo   { background: var(--amber); }
+    .snr-none { background: var(--muted); }
+    .sat-snr  { width: 26px; text-align: right; color: var(--text); font-size: 10px; }
+    .sat-used { width: 12px; height: 12px; border-radius: 50%;
+                border: 2px solid var(--muted); flex-shrink: 0; }
+    .sat-used.active { background: var(--lime); border-color: var(--lime); }
+
+    /* ---------- Track playback ---------- */
+    .playback-controls {
+      display: flex; gap: 8px; align-items: center; margin-bottom: 10px;
+    }
+    .ctrl-btn {
+      background: rgba(0,229,255,.08); border: 1px solid var(--border);
+      border-radius: 4px; color: var(--cyan); font-size: 14px;
+      width: 32px; height: 28px; cursor: pointer; display: flex;
+      align-items: center; justify-content: center;
+      transition: background .2s;
+    }
+    .ctrl-btn:hover { background: rgba(0,229,255,.18); }
+    .ctrl-btn.active { background: rgba(0,229,255,.25); border-color: var(--cyan); }
+    .ctrl-btn:disabled { opacity: .3; cursor: default; }
+    #play-scrubber {
+      flex: 1; height: 4px; accent-color: var(--cyan); cursor: pointer;
+    }
+    .track-stat { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+
+    /* ---------- Frame inspector ---------- */
+    .frame-section { margin-bottom: 12px; }
+    .frame-section-label {
+      font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 6px;
+    }
+    .frame-row {
+      display: flex; justify-content: space-between; align-items: baseline;
+      padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,.04);
+    }
+    .frame-key { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+    .frame-val { font-family: var(--mono); font-size: 11px; }
+    .val-geo  { color: var(--cyan); }
+    .val-ecef { color: var(--amber); }
+    .val-eci  { color: var(--violet); }
+
+    /* ---------- Constellation legend ---------- */
+    .legend { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+    .legend-item { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--muted); }
+    .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+    /* ---------- No-fix overlay ---------- */
+    #no-fix-banner {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      background: rgba(255,77,109,.12); border: 1px solid var(--red);
+      padding: 16px 24px; border-radius: var(--radius);
+      font-family: var(--mono); color: var(--red); font-size: 12px;
+      text-align: center; display: none; z-index: 200;
+      pointer-events: none;
+    }
+
+    /* ---------- Scrollbar ---------- */
+    #right-panel::-webkit-scrollbar { width: 4px; }
+    #right-panel::-webkit-scrollbar-track { background: transparent; }
+    #right-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* ---------- Tooltip ---------- */
+    #tooltip {
+      position: absolute; background: rgba(13,26,38,.95);
+      border: 1px solid var(--border); border-radius: 4px;
+      padding: 6px 10px; font-family: var(--mono); font-size: 10px;
+      color: var(--text); pointer-events: none; z-index: 300;
+      display: none; white-space: nowrap;
+    }
+
+    /* ---------- Globe overlay buttons ---------- */
+    #globe-btns {
+      position: absolute; top: 54px; left: 12px;
+      display: flex; flex-direction: column; gap: 6px; z-index: 100;
+    }
+    .g-btn {
+      background: rgba(13,26,38,.88); border: 1px solid var(--border);
+      border-radius: 4px; color: var(--muted); font-family: var(--mono);
+      font-size: 9px; letter-spacing: 1px; text-transform: uppercase;
+      padding: 5px 10px; cursor: pointer; transition: all .2s;
+      backdrop-filter: blur(8px); white-space: nowrap;
+    }
+    .g-btn:hover { color: var(--text); border-color: var(--cyan); }
+    .g-btn.on { color: var(--cyan); border-color: var(--cyan);
+                background: rgba(0,229,255,.1); }
+  
+
+    /* ── COSMOFRAME additions ── */
+
+    :root {
+      --bg:      #04080f;
+      --panel:   #080e18;
+      --border:  #253545;
+      --text:    #dde8f0;
+      --muted:   #7a9ab0;
+      --mono:    'JetBrains Mono', monospace;
+      /* Mode accent colours */
+      --m1: #00e5ff;   /* Geocentric Equatorial — cyan */
+      --m2: #ffc040;   /* Geocentric Ecliptic   — gold */
+      --m3: #40c0ff;   /* Heliocentric Equat.   — sky blue */
+      --m4: #c040ff;   /* Heliocentric Ecliptic — violet */
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; background: var(--bg); color: var(--text); font-family: var(--mono); overflow: hidden; }
+
+    #cesiumContainer { position: absolute; inset: 0; }
+
+    /* ── Top bar ── */
+    #topbar {
+      position: absolute; top: 0; left: 0; right: 0; height: 48px;
+      background: rgba(4,8,15,.92); border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 0; z-index: 200;
+      backdrop-filter: blur(12px);
+    }
+    #logo {
+      padding: 0 20px; font-size: 15px; font-weight: 700; letter-spacing: 3px;
+      color: var(--text); border-right: 1px solid var(--border);
+    }
+    #logo span { font-size: 9px; font-weight: 300; letter-spacing: 2px; color: var(--muted); display: block; }
+
+    /* ── Mode buttons ── */
+    #mode-bar {
+      display: flex; gap: 2px; padding: 0 16px; border-right: 1px solid var(--border);
+    }
+    .mode-btn {
+      padding: 6px 14px; font-family: var(--mono); font-size: 9px; font-weight: 700;
+      letter-spacing: 1.5px; text-transform: uppercase; cursor: pointer;
+      background: transparent; border: 1px solid transparent;
+      border-radius: 3px; color: var(--muted); transition: all .25s;
+    }
+    .mode-btn:hover { color: var(--text); border-color: var(--border); }
+    .mode-btn.active { border-color: var(--accent); color: var(--accent);
+      background: rgba(255,255,255,.06); }
+    #btn-m1 { --accent: var(--m1); }
+    #btn-m2 { --accent: var(--m2); }
+    #btn-m3 { --accent: var(--m3); }
+    #btn-m4 { --accent: var(--m4); }
+
+    #topbar-right {
+      margin-left: auto; display: flex; align-items: center; gap: 20px; padding: 0 20px;
+    }
+    #clock { font-size: 13px; font-weight: 700; color: var(--m1); letter-spacing: 2px; }
+    #observer-display { font-size: 10px; color: var(--muted); }
+
+    /* ── HUD ── */
+    #hud {
+      position: absolute; bottom: 20px; left: 20px; z-index: 200;
+      background: rgba(4,8,15,.88); border: 1px solid var(--border);
+      border-left: 3px solid var(--accent-color);
+      border-radius: 4px; padding: 14px 18px; min-width: 260px;
+      backdrop-filter: blur(10px); transition: border-color .6s;
+    }
+    #hud-title { font-size: 9px; letter-spacing: 2px; color: var(--muted); margin-bottom: 10px; text-transform: uppercase; }
+    .hud-row { display: flex; justify-content: space-between; gap: 20px;
+      font-size: 11px; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,.04); }
+    .hud-key { color: var(--muted); }
+    .hud-val { color: var(--text); font-weight: 700; text-align: right; }
+    .hud-val.accent { color: var(--accent-color); }
+    #orient-canvas { display: block; }
+    #orient-info { font-size: 9px; color: var(--muted); margin-top: 8px; line-height: 1.7; }
+
+    /* ── Body info panel ── */
+    #body-panel {
+      position: absolute; top: 60px; right: 16px; z-index: 200;
+      background: rgba(4,8,15,.92); border: 1px solid var(--border);
+      border-radius: 4px; padding: 14px; width: 240px;
+      backdrop-filter: blur(10px); display: none;
+    }
+    #body-panel.visible { display: block; }
+    #body-close { float: right; cursor: pointer; color: var(--muted); font-size: 11px; }
+    #body-name { font-size: 14px; font-weight: 700; margin-bottom: 10px; }
+    .body-row { font-size: 10px; display: flex; justify-content: space-between;
+      padding: 2px 0; border-bottom: 1px solid var(--border); }
+    .body-key { color: var(--muted); }
+
+    /* ── Overlay buttons ── */
+    #overlay-btns {
+      position: absolute; top: 58px; left: 16px; z-index: 200;
+      display: flex; flex-direction: column; gap: 5px;
+    }
+    .o-btn {
+      background: rgba(4,8,15,.88); border: 1px solid var(--border);
+      border-radius: 3px; color: var(--muted); font-family: var(--mono);
+      font-size: 9px; letter-spacing: 1px; padding: 5px 10px; cursor: pointer;
+      backdrop-filter: blur(8px); transition: all .2s; text-transform: uppercase;
+    }
+    .o-btn:hover { color: var(--text); border-color: #4a8fbb; }
+    .o-btn.on { color: #4a8fbb; border-color: #4a8fbb; background: rgba(74,143,187,.1); }
+
+    /* ── Observer setter ── */
+    #obs-panel {
+      position: absolute; top: 58px; right: 272px; z-index: 200;
+      background: rgba(4,8,15,.95); border: 1px solid var(--border);
+      border-radius: 4px; padding: 14px; width: 240px;
+      backdrop-filter: blur(10px); display: none;
+    }
+    #obs-panel.visible { display: block; }
+    #obs-panel input {
+      width: 100%; background: #0d1520; border: 1px solid var(--border);
+      border-radius: 3px; color: var(--text); font-family: var(--mono);
+      font-size: 11px; padding: 5px 8px; margin-bottom: 6px;
+    }
+    #obs-panel button {
+      width: 100%; font-family: var(--mono); font-size: 9px; letter-spacing: 1px;
+      background: transparent; border: 1px solid var(--m1); color: var(--m1);
+      padding: 6px; border-radius: 3px; cursor: pointer; text-transform: uppercase;
+    }
+    #obs-panel label { font-size: 9px; color: var(--muted); display: block; margin-bottom: 3px; }
+  
+
+    /* ── STARMAP-specific ── */
+    :root {
+      --m1: #00e5ff;
+      --m2: #ffc040;
+      --m3: #40c0ff;
+      --m4: #c040ff;
+    }
+
+    /* Scale switcher bar */
+    #scale-bar {
+      position: absolute;
+      bottom: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 200;
+      background: rgba(4,8,15,.88);
+      border: 1px solid var(--border, #1a2a3a);
+      border-radius: 24px;
+      padding: 6px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      backdrop-filter: blur(10px);
+    }
+    #scale-bar label {
+      font-family: var(--mono,'JetBrains Mono');
+      font-size: 9px;
+      letter-spacing: 1.5px;
+      color: var(--muted, #4a6070);
+      text-transform: uppercase;
+    }
+    #scale-slider {
+      -webkit-appearance: none;
+      width: 260px;
+      height: 3px;
+      border-radius: 2px;
+      background: linear-gradient(to right, #00e5ff, #ffc040, #c040ff);
+      outline: none;
+    }
+    #scale-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: #fff;
+      cursor: pointer;
+      border: 2px solid #00e5ff;
+    }
+    #scale-label {
+      font-family: var(--mono,'JetBrains Mono');
+      font-size: 10px;
+      color: #00e5ff;
+      min-width: 120px;
+      text-align: center;
+      font-weight: 700;
+    }
+
+    /* Frame mode buttons */
+    #mode-bar {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 48px;
+      background: rgba(4,8,15,.92);
+      border-bottom: 1px solid var(--border, #1a2a3a);
+      display: flex;
+      align-items: center;
+      z-index: 201;
+      backdrop-filter: blur(12px);
+    }
+    #app-logo {
+      padding: 0 20px;
+      font-family: var(--mono,'JetBrains Mono');
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      color: var(--text, #ccd6e0);
+      border-right: 1px solid var(--border, #1a2a3a);
+      white-space: nowrap;
+    }
+    #app-logo span {
+      font-size: 9px;
+      font-weight: 300;
+      letter-spacing: 2px;
+      color: var(--muted, #4a6070);
+      display: block;
+    }
+    #frame-btns {
+      display: flex;
+      gap: 2px;
+      padding: 0 12px;
+      border-right: 1px solid var(--border, #1a2a3a);
+    }
+    .frame-btn {
+      padding: 5px 12px;
+      font-family: var(--mono,'JetBrains Mono');
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      cursor: pointer;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 3px;
+      color: var(--muted, #4a6070);
+      transition: all .25s;
+    }
+    .frame-btn:hover { color: var(--text,#ccd6e0); border-color: var(--border,#1a2a3a); }
+    .frame-btn.active { border-color: var(--frame-accent); color: var(--frame-accent);
+      background: rgba(255,255,255,.06); }
+    #btn-fm1 { --frame-accent: var(--m1); }
+    #btn-fm2 { --frame-accent: var(--m2); }
+    #btn-fm3 { --frame-accent: var(--m3); }
+    #btn-fm4 { --frame-accent: var(--m4); }
+
+    /* Adjust top bar of GNSS panel to work with the new mode bar */
+    /* topbar top set in base rule */
+    #right-panel { top: 96px !important; }
+    #globe-btns { top: 106px !important; }
+    #cesiumContainer { top: 0; }
+
+    /* COSMOFRAME HUD */
+    #cosmo-hud {
+      position: absolute;
+      bottom: 90px;
+      left: 20px;
+      z-index: 200;
+      background: rgba(4,8,15,.88);
+      border: 1px solid var(--border,#1a2a3a);
+      border-left: 3px solid var(--frame-accent-color, #00e5ff);
+      border-radius: 4px;
+      padding: 12px 16px;
+      min-width: 240px;
+      backdrop-filter: blur(10px);
+      font-family: var(--mono,'JetBrains Mono');
+      display: none;
+    }
+    #cosmo-hud.visible { display: block; }
+    .hud-row { display: flex; justify-content: space-between; gap: 16px;
+      font-size: 11px; padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,.04); }
+    .hud-key { color: var(--muted,#4a6070); }
+    .hud-val { color: var(--text,#ccd6e0); font-weight: 700; }
+    .hud-val.accent { color: var(--frame-accent-color,#00e5ff); }
+
+    /* Orient widget */
+    #orient-widget {
+      position: absolute; bottom: 90px; right: 20px; z-index: 200;
+      background: rgba(4,8,15,.88); border: 1px solid var(--border,#1a2a3a);
+      border-radius: 4px; padding: 10px; backdrop-filter: blur(10px);
+      display: none;
+    }
+    #orient-widget.visible { display: block; }
+    #orient-canvas { display: block; }
+    #orient-info { font-size: 9px; color: var(--muted,#4a6070); margin-top: 6px; line-height: 1.6; font-family: var(--mono,'JetBrains Mono'); }
+  
+    /* ── Right panel toggle ── */
+    #panel-toggle {
+      position: absolute;
+      top: 50%;
+      right: 320px;
+      transform: translateY(-50%);
+      z-index: 150;
+      background: rgba(13,26,38,.92);
+      border: 1px solid var(--border);
+      border-right: none;
+      border-radius: 4px 0 0 4px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+      cursor: pointer;
+      padding: 8px 5px;
+      line-height: 1;
+      transition: right .3s ease, color .2s;
+      writing-mode: vertical-rl;
+      letter-spacing: 1.5px;
+      backdrop-filter: blur(8px);
+    }
+    #panel-toggle:hover { color: var(--text); border-color: #4a8fbb; }
+    #panel-toggle.collapsed { right: 0; border-radius: 4px 0 0 4px; }
+
+    #right-panel {
+      transition: transform .3s ease, width .3s ease;
+    }
+    #right-panel.collapsed {
+      transform: translateX(320px);
+    }
+
+/* ══ LEFT PANEL ══════════════════════════════════════════════════════════ */
+#left-panel-toggle {
+  position: absolute;
+  top: 50%;
+  left: 320px;
+  transform: translateY(-50%);
+  z-index: 150;
+  background: rgba(13,26,38,.92);
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 4px 4px 0;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 8px 5px;
+  writing-mode: vertical-rl;
+  letter-spacing: 1.5px;
+  transition: left .3s ease, color .2s;
+  backdrop-filter: blur(8px);
+}
+#left-panel-toggle:hover { color: var(--text); border-color: #4a8fbb; }
+#left-panel-toggle.collapsed { left: 0; }
+
+#left-panel {
+  position: absolute;
+  top: 96px;
+  left: 0;
+  width: 320px;
+  bottom: 60px;
+  background: rgba(13,26,38,.97);
+  border-right: 1px solid var(--border);
+  z-index: 99;
+  display: flex;
+  flex-direction: column;
+  transition: transform .3s ease;
+  backdrop-filter: blur(12px);
+  overflow: hidden;
+}
+#left-panel.collapsed { transform: translateX(-320px); }
+
+/* Tab bar */
+.lp-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.lp-tab {
+  flex: 1;
+  padding: 7px 2px;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #8aabb8;
+  cursor: pointer;
+  transition: all .2s;
+}
+.lp-tab:hover { color: var(--text); }
+.lp-tab.active { color: var(--cyan); border-bottom-color: var(--cyan); }
+
+/* Panes */
+.lp-pane {
+  display: none;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px;
+  overflow-y: auto;
+  flex: 1;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.lp-pane.active { display: flex; }
+
+.lp-section-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--text);
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+/* Buttons */
+.lp-btn {
+  width: 100%;
+  padding: 7px 10px;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  text-align: left;
+  background: rgba(255,255,255,.02);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: #8aabb8;
+  cursor: pointer;
+  transition: all .2s;
+}
+.lp-btn:hover { color: var(--text); border-color: #4a8fbb; background: rgba(74,143,187,.08); }
+.lp-btn.on { color: var(--cyan); border-color: var(--cyan); background: rgba(0,229,255,.06); }
+
+#scale-bar-inner input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  cursor: pointer;
+  border: 2px solid #00e5ff;
+}
+
+/* Adjust globe/cesium area to account for left panel */
+#cesiumContainer { left: 320px; right: 320px; transition: left .3s ease, right .3s ease; }
+#topbar { transition: left .3s ease, right .3s ease; }
+#globe-btns { display: none !important; }
+#scale-bar { }
+
+/* Centre Cesium ion attribution between both panels */
+.cesium-widget-credits {
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  right: auto !important;
+  bottom: 4px !important;
+  text-align: center !important;
+  width: auto !important;
+  white-space: nowrap !important;
+}
+
+/* Scale bar centred in globe area */
+#scale-bar {
+  left: 50%;
+  transform: translateX(-50%);
+}

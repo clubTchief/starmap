@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>STARMAP — Unified GNSS + Celestial Visualiser</title>
+  <link rel="icon" href="/favicon.ico" type="image/x-icon"/>
+
+  <!-- CesiumJS -->
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.142/Build/Cesium/Cesium.js"></script>
+  <link  href="https://cesium.com/downloads/cesiumjs/releases/1.142/Build/Cesium/Widgets/widgets.css" rel="stylesheet"/>
+
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;700&display=swap" rel="stylesheet"/>
+
+  <!-- STARMAP styles -->
+  <link rel="stylesheet" href="/css/starmap.css"/>
+</head>
+<body>
+
+<!-- ══ UNIFIED TOP BAR ══════════════════════════════════════════════════════ -->
+<div id="mode-bar">
+  <div id="app-logo">STARMAP<span>GNSS + Celestial Visualiser</span></div>
+  <div id="frame-btns">
+    <button class="frame-btn" id="btn-fm0" onclick="switchFrameMode(0)" title="GNSS Mode — default view">⊕ GNSS</button>
+    <button class="frame-btn" id="btn-fm1" onclick="switchFrameMode(1)" title="Geocentric Equatorial">① GEO·EQ</button>
+    <button class="frame-btn" id="btn-fm2" onclick="switchFrameMode(2)" title="Geocentric Ecliptic">② GEO·ECL</button>
+    <button class="frame-btn" id="btn-fm3" onclick="switchFrameMode(3)" title="Heliocentric Equatorial">③ HELIO·EQ</button>
+    <button class="frame-btn" id="btn-fm4" onclick="switchFrameMode(4)" title="Heliocentric Ecliptic">④ HELIO·ECL</button>
+  </div>
+</div>
+
+<!-- ══ LEFT PANEL ══════════════════════════════════════════════════════════ -->
+<button id="left-panel-toggle" onclick="toggleLeftPanel()" title="Show/hide controls">CONTROLS</button>
+<div id="left-panel">
+
+  <!-- ── Tab bar ── -->
+  <div class="lp-tabs">
+    <button class="lp-tab active" id="lpt-view"    onclick="lpTab('view')">VIEW</button>
+    <button class="lp-tab"        id="lpt-display"  onclick="lpTab('display')">DISPLAY</button>
+    <button class="lp-tab"        id="lpt-track"    onclick="lpTab('track')">TRACK</button>
+    <button class="lp-tab"        id="lpt-frame"    onclick="lpTab('frame')">FRAME</button>
+  </div>
+
+  <!-- ── VIEW tab ── -->
+  <div class="lp-pane active" id="lp-view">
+    <div class="lp-section-label">NAVIGATION</div>
+    <button class="lp-btn on"  id="btn-terminator">☀ TERMINATOR</button>
+    <button class="lp-btn"     id="btn-flyhere">⊕ FLY TO FIX</button>
+    <button class="lp-btn"     id="btn-skyview">◎ SKY VIEW</button>
+    <button class="lp-btn"     id="btn-obs-settings" onclick="toggleObsPanel()">⚙ SET LOCATION</button>
+    <button class="lp-btn"     id="btn-geo" onclick="requestBrowserGeo()">⊕ MY LOCATION</button>
+
+  </div>
+
+  <!-- ── DISPLAY tab ── -->
+  <div class="lp-pane" id="lp-display">
+    <div class="lp-section-label">GLOBE LAYERS</div>
+    <button class="lp-btn on"  id="btn-graticule">⊞ GRATICULE</button>
+    <button class="lp-btn"     id="btn-nightlights">🌃 NIGHT LIGHTS</button>
+    <button class="lp-btn"     id="btn-eqgrid">✦ EQ GRID</button>
+    <div class="lp-section-label" style="margin-top:8px;">OBJECTS</div>
+    <button class="lp-btn on"  id="btn-gps-display">📡 GPS DISPLAY</button>
+    <div class="lp-section-label" style="margin-top:8px;">FRAME HUD</div>
+    <div id="cosmo-hud" style="margin-top:4px;">
+      <div id="cosmo-hud-title" style="font-size:9px;letter-spacing:1.5px;color:var(--cyan);margin-bottom:6px;text-transform:uppercase;font-family:var(--mono);">GNSS / WGS-84</div>
+      <div id="cosmo-hud-rows" style="font-size:10px;"></div>
+    </div>
+  </div>
+
+  <!-- ── TRACK tab ── -->
+  <div class="lp-pane" id="lp-track">
+    <div class="lp-section-label">SATELLITE TRACKING</div>
+    <button class="lp-btn"     id="btn-issfly">🛰 FLY WITH ISS</button>
+    <select id="sat-selector" title="Select satellite to fly with"
+      style="width:100%;margin:6px 0;background:rgba(13,26,38,.88);border:1px solid var(--border);
+             border-radius:4px;color:var(--muted);font-family:var(--mono);font-size:9px;
+             letter-spacing:1px;padding:5px 8px;cursor:pointer;">
+      <option value="25544">🛰 ISS (ZARYA)</option>
+    </select>
+    <div class="lp-section-label" style="margin-top:8px;">ADD SATELLITE</div>
+    <div style="display:flex;gap:4px;margin-top:4px;">
+      <input id="norad-input" type="number" placeholder="NORAD ID"
+        style="flex:1;background:rgba(13,26,38,.88);border:1px solid var(--border);border-radius:4px;
+               color:var(--text);font-family:var(--mono);font-size:10px;padding:5px 8px;"/>
+      <button onclick="addSatFromInput()" style="background:rgba(0,229,255,.1);border:1px solid var(--cyan);
+               border-radius:4px;color:var(--cyan);font-family:var(--mono);font-size:9px;
+               padding:5px 8px;cursor:pointer;letter-spacing:1px;">ADD</button>
+    </div>
+    <div id="sat-cards-container" style="margin-top:8px;"></div>
+  </div>
+
+  <!-- ── FRAME tab ── -->
+  <div class="lp-pane" id="lp-frame">
+    <div class="lp-section-label">ORIENTATION AXES</div>
+    <div style="display:flex;align-items:center;gap:10px;padding:6px 0;">
+      <canvas id="orient-canvas-lp" width="90" height="90" style="flex-shrink:0;"></canvas>
+      <div style="font-size:10px;font-family:var(--mono);line-height:1.9;">
+        <div id="ow-frame-lp" style="color:var(--text);font-weight:700;">Frame: WGS-84</div>
+        <div id="ow-origin-lp" style="color:#8aabb8;">Origin: Earth</div>
+        <div id="ow-epoch-lp" style="font-size:9px;color:#8aabb8;">—</div>
+        <div style="font-size:8px;color:#5a7a8a;margin-top:4px;">
+          <span style="color:#ff4444;">■</span> X &nbsp;
+          <span style="color:#44ff44;">■</span> Y &nbsp;
+          <span style="color:#4488ff;">■</span> Z
+        </div>
+      </div>
+    </div>
+    <div class="lp-section-label" style="margin-top:6px;">OBSERVER COORDS</div>
+    <div id="active-frame-section-lp" style="margin-top:4px;">
+      <div id="active-frame-label-lp" style="font-size:9px;letter-spacing:1.5px;color:var(--cyan);margin-bottom:6px;text-transform:uppercase;font-family:var(--mono);">GNSS / WGS-84</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 8px;font-size:10px;font-family:var(--mono);">
+        <div style="color:#8aabb8;" id="lp-af-k1">φ Latitude</div>  <div id="lp-af-v1" style="color:var(--cyan);text-align:right;">--</div>
+        <div style="color:#8aabb8;" id="lp-af-k2">λ Longitude</div> <div id="lp-af-v2" style="color:var(--cyan);text-align:right;">--</div>
+        <div style="color:#8aabb8;" id="lp-af-k3">LST</div>         <div id="lp-af-v3" style="color:var(--cyan);text-align:right;">--</div>
+        <div style="color:#8aabb8;" id="lp-af-k4">GMST</div>        <div id="lp-af-v4" style="color:var(--cyan);text-align:right;">--</div>
+      </div>
+    </div>
+    <div class="lp-section-label" style="margin-top:8px;">CAMERA VIEWPOINT</div>
+    <div id="frame-camera-coords" style="font-size:10px;font-family:var(--mono);margin-top:4px;">
+      <div class="frame-row"><span class="frame-key">Camera X</span><span class="frame-val" id="cam-x">--</span></div>
+      <div class="frame-row"><span class="frame-key">Camera Y</span><span class="frame-val" id="cam-y">--</span></div>
+      <div class="frame-row"><span class="frame-key">Camera Z</span><span class="frame-val" id="cam-z">--</span></div>
+      <div class="frame-row"><span class="frame-key">Alt MSL</span><span class="frame-val" id="cam-alt">--</span></div>
+    </div>
+  </div>
+
+</div><!-- /left-panel -->
+
+
+<!-- ══ GNSS TOP BAR (below mode bar) ════════════════════════════════════════ -->
+<div id="topbar">
+  <div id="logo-wrap">
+    <span id="app-title">GNSS TRACKER</span>
+    <span id="live-badge" class="badge-offline">● CONNECTING</span>
+  </div>
+  <div id="topbar-right">
+    <span id="utc-clock">--:--:-- UTC</span>
+  </div>
+</div>
+
+<!-- ══ 3D GLOBE ══════════════════════════════════════════════════════════════ -->
+<div id="cesiumContainer"></div>
+
+<!-- ══ GNSS GLOBE BUTTONS ═══════════════════════════════════════════════════ -->
+
+
+
+<!-- ══ GNSS RIGHT PANEL ══════════════════════════════════════════════════════ -->
+<button id="panel-toggle" onclick="toggleRightPanel()" title="Show/hide panel">PANEL</button>
+<div id="right-panel">
+
+  <!-- ── TAB 1: POSITION ── -->
+  <div class="tab-pane active" id="tab-position">
+
+
+    <div class="card" style="padding:8px;">
+      <button onclick="recentreView()" style="width:100%;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;background:transparent;border:1px solid var(--cyan);color:var(--cyan);padding:8px;border-radius:3px;cursor:pointer;transition:all .2s;" onmouseover="this.style.background='rgba(0,229,255,.1)'" onmouseout="this.style.background='transparent'">
+        ⊕ RECENTRE VIEW
+      </button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">FIX STATUS</div>
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+        <span class="fix-badge fix-none" id="fix-badge">NO FIX</span>
+        <div id="no-fix-banner" style="display:none;background:#ff4d4d22;color:#ff6b6b;font-family:var(--mono);font-size:10px;padding:4px 8px;border-radius:3px;margin-top:6px;letter-spacing:1px;">⚠ NO GPS FIX — awaiting signal</div>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--muted);">
+          SATS: <span id="sats-used" style="color:var(--cyan);">0</span>
+        </span>
+      </div>
+      <div class="kv">
+        <div class="kv-item"><span class="kv-label">Latitude</span><span id="pos-lat">--</span></div>
+        <div class="kv-item"><span class="kv-label">Longitude</span><span id="pos-lon">--</span></div>
+        <div class="kv-item"><span class="kv-label">Altitude</span><span id="pos-alt">--</span></div>
+        <div class="kv-item"><span class="kv-label">HDOP</span><span id="pos-hdop">--</span></div>
+      </div>
+    </div>
+
+
+    <div class="card" id="viewpoint-card">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>VIEWPOINT</span>
+        <span id="vp-frame-badge" style="font-size:9px;letter-spacing:1px;color:var(--cyan);font-weight:400;">GNSS</span>
+      </div>
+      <div class="kv">
+        <div class="kv-item"><span class="kv-label" id="vp-k1">φ Latitude</span><span id="vp-v1" style="color:var(--cyan);">--</span></div>
+        <div class="kv-item"><span class="kv-label" id="vp-k2">λ Longitude</span><span id="vp-v2" style="color:var(--cyan);">--</span></div>
+        <div class="kv-item"><span class="kv-label" id="vp-k3">Coord 3</span><span id="vp-v3" style="color:var(--cyan);">--</span></div>
+        <div class="kv-item"><span class="kv-label" id="vp-k4">Coord 4</span><span id="vp-v4" style="color:var(--cyan);">--</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">GPS UTC CLOCK</div>
+      <div style="font-family:var(--mono);font-size:13px;color:var(--lime);letter-spacing:1px;" id="gps-utc-detail">----</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">SIGNAL OVERVIEW</div>
+      <div id="sig-grid" class="kv"></div>
+    </div>
+
+  </div>
+
+  <!-- ── TAB 2: SKY PLOT ── -->
+  <div class="tab-pane" id="tab-sky">
+    <div class="card" style="padding:8px;">
+      <div class="card-title">OBSERVER SKY VIEW</div>
+      <div id="skyplot-wrap"><canvas id="skyplot-canvas" width="280" height="280"></canvas></div>
+      <div class="legend" id="sky-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#00e5ff"></div>G · GPS</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#8899aa"></div>R · GLO</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#00c896"></div>E · GAL</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ff7a00"></div>B · BDS</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#cc44ff"></div>Q · QZSS</div>
+        <div class="legend-item"><div class="legend-dot" style="border:2px solid #ccd6e0;background:transparent"></div>used</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">SATELLITES IN VIEW</div>
+      <div id="sat-list"></div>
+    </div>
+  </div>
+
+  <!-- ── TAB 3: TRACK ── -->
+  <div class="tab-pane" id="tab-track">
+    <div class="card">
+      <div class="card-title">TRAIL CONTROLS</div>
+      <div class="playback-controls">
+        <button class="ctrl-btn" id="btn-record" title="Record">⏺</button>
+        <button class="ctrl-btn" id="btn-play" title="Play">▶</button>
+        <button class="ctrl-btn" id="btn-pause" title="Pause" disabled>⏸</button>
+        <button class="ctrl-btn" id="btn-stop" title="Stop / Reset">⏹</button>
+        <button class="ctrl-btn" id="btn-export" title="Export CZML" style="font-size:10px;width:auto;padding:0 8px;">CZML</button>
+      </div>
+      <input type="range" id="play-scrubber" min="0" max="100" value="0" disabled/>
+    </div>
+    <div class="card">
+      <div class="card-title">TRACK STATS</div>
+      <div class="kv">
+        <div class="kv-item"><span class="kv-label">Points</span><span id="track-pts" class="track-stat">0</span></div>
+        <div class="kv-item"><span class="kv-label">Distance</span><span id="track-dist" class="track-stat">0 m</span></div>
+        <div class="kv-item"><span class="kv-label">Duration</span><span id="track-dur" class="track-stat">--</span></div>
+        <div class="kv-item"><span class="kv-label">Playback</span><span id="track-pb-time" class="track-stat">--</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── TAB 4: FRAMES ── -->
+  <div class="tab-pane" id="tab-frames">
+    <div class="card" id="frame-ref-card">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>REFERENCE FRAME</span>
+        <span id="rf-mode-badge" style="font-size:9px;letter-spacing:1px;color:var(--cyan);font-weight:400;">GNSS</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;padding:4px 0 8px 0;">
+        <canvas id="orient-canvas" width="80" height="80" style="flex-shrink:0;"></canvas>
+        <div id="orient-info" style="font-size:9px;color:var(--muted);line-height:1.8;font-family:var(--mono);">
+          <div id="ow-frame" style="color:var(--text);font-weight:700;">Frame: WGS-84</div>
+          <div id="ow-origin">Origin: Earth</div>
+          <div id="ow-epoch" style="font-size:8px;">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">FRAME INSPECTOR</div>
+
+      <div class="frame-section">
+        <div class="frame-section-label">■ GEODETIC (WGS-84)</div>
+        <div class="frame-row"><span class="frame-key">φ Latitude</span><span class="frame-val val-geo" id="fi-lat">--</span></div>
+        <div class="frame-row"><span class="frame-key">λ Longitude</span><span class="frame-val val-geo" id="fi-lon">--</span></div>
+        <div class="frame-row"><span class="frame-key">h Altitude</span><span class="frame-val val-geo" id="fi-alt">--</span></div>
+      </div>
+
+      <div class="frame-section">
+        <div class="frame-section-label" style="color:var(--amber)">■ ECEF (m)</div>
+        <div class="frame-row"><span class="frame-key">X</span><span class="frame-val val-ecef" id="fi-ex">--</span></div>
+        <div class="frame-row"><span class="frame-key">Y</span><span class="frame-val val-ecef" id="fi-ey">--</span></div>
+        <div class="frame-row"><span class="frame-key">Z</span><span class="frame-val val-ecef" id="fi-ez">--</span></div>
+        <div class="frame-row"><span class="frame-key">|r| range</span><span class="frame-val val-ecef" id="fi-range">--</span></div>
+      </div>
+
+      <div class="frame-section">
+        <div class="frame-section-label" style="color:var(--violet)">■ ECI J2000 (m)</div>
+        <div class="frame-row"><span class="frame-key">X</span><span class="frame-val val-eci" id="fi-ix">--</span></div>
+        <div class="frame-row"><span class="frame-key">Y</span><span class="frame-val val-eci" id="fi-iy">--</span></div>
+        <div class="frame-row"><span class="frame-key">Z</span><span class="frame-val val-eci" id="fi-iz">--</span></div>
+        <div class="frame-row"><span class="frame-key">GMST epoch</span><span class="frame-val val-eci" id="fi-epoch" style="font-size:9px;">--</span></div>
+      </div>
+
+      <!-- Active frame coords — updates dynamically with mode selection -->
+      <div class="frame-section" id="active-frame-section" style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;">
+        <div class="frame-section-label" id="active-frame-label" style="color:var(--cyan);">■ ACTIVE FRAME: GNSS / WGS-84</div>
+        <div class="frame-row"><span class="frame-key" id="af-k1">φ Latitude</span><span class="frame-val" id="af-v1" style="color:var(--cyan);">--</span></div>
+        <div class="frame-row"><span class="frame-key" id="af-k2">λ Longitude</span><span class="frame-val" id="af-v2" style="color:var(--cyan);">--</span></div>
+        <div class="frame-row"><span class="frame-key" id="af-k3">h Altitude</span><span class="frame-val" id="af-v3" style="color:var(--cyan);">--</span></div>
+        <div class="frame-row"><span class="frame-key" id="af-k4">X / RA</span><span class="frame-val" id="af-v4" style="color:var(--cyan);">--</span></div>
+        <div class="frame-row"><span class="frame-key" id="af-k5">Y / Dec</span><span class="frame-val" id="af-v5" style="color:var(--cyan);">--</span></div>
+        <div class="frame-row"><span class="frame-key" id="af-k6">Z / Dist</span><span class="frame-val" id="af-v6" style="color:var(--cyan);">--</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── TAB 5: GPS 3D ── -->
+  <div class="tab-pane" id="tab-gps3d">
+    <div class="card">
+      <div class="card-title">GNSS CONSTELLATION 3D</div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.8;">
+        <span style="color:#00e5ff">G</span> GPS &nbsp;·&nbsp;
+        <span style="color:#8899aa">R</span> GLONASS &nbsp;·&nbsp;
+        <span style="color:#00c896">E</span> GALILEO &nbsp;·&nbsp;
+        <span style="color:#ff7a00">B</span> BEIDOU &nbsp;·&nbsp;
+        <span style="color:#cc44ff">Q</span> QZSS<br/>
+        GPS via Keplerian orbits. R/E/B/Q from live el/az.
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">VISIBILITY OPTIONS</div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px;">
+        <input type="checkbox" id="opt-orbits" checked style="accent-color:var(--cyan);"/>
+        <span style="font-family:var(--mono);font-size:11px;">Show orbit paths</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px;">
+        <input type="checkbox" id="opt-labels" checked style="accent-color:var(--cyan);"/>
+        <span style="font-family:var(--mono);font-size:11px;">Show PRN labels</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px;">
+        <input type="checkbox" id="opt-cone" checked style="accent-color:var(--cyan);"/>
+        <span style="font-family:var(--mono);font-size:11px;">Visibility cone</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+        <input type="checkbox" id="opt-links" checked style="accent-color:var(--cyan);"/>
+        <span style="font-family:var(--mono);font-size:11px;">Observer→Sat lines</span>
+      </label>
+    </div>
+    <div class="card">
+      <div class="card-title">ACTIVE SATELLITES</div>
+      <div id="gps3d-list" style="font-family:var(--mono);font-size:10px;color:var(--muted);"></div>
+    </div>
+  </div>
+
+  <!-- ── TAB 6: SAT TRACK ── -->
+  <div class="tab-pane" id="tab-sattrack">
+
+    <!-- Add satellite search -->
+    <div class="card">
+      <div class="card-title">TRACK A SATELLITE</div>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <input id="sat-norad-input" type="number" placeholder="NORAD ID (e.g. 20580)"
+          style="flex:1;background:var(--panel);border:1px solid var(--border);border-radius:3px;
+                 color:var(--text);font-family:var(--mono);font-size:11px;padding:5px 8px;"/>
+        <button onclick="satAddFromInput()"
+          style="font-family:var(--mono);font-size:9px;letter-spacing:1px;
+                 background:transparent;border:1px solid var(--cyan);color:var(--cyan);
+                 padding:5px 10px;border-radius:3px;cursor:pointer;">+ ADD</button>
+      </div>
+      <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:6px;">
+        Common: ISS=25544 · HST=20580 · Tiangong=48274 · Starlink-1=44713
+      </div>
+    </div>
+
+    <!-- Dynamic per-satellite cards rendered by JS -->
+    <div id="sat-cards-container"></div>
+
+  </div>
+
+</div><!-- /right-panel -->
+
+<!-- ══ SCALE SLIDER ══════════════════════════════════════════════════════════ -->
+<div id="scale-bar">
+  <span class="scale-label-text">SCALE</span>
+  <input type="range" id="scale-slider" min="0" max="100" value="20"
+    oninput="onScaleSlider(this.value)"/>
+  <div id="scale-label">GNSS / Ground</div>
+</div>
+
+  <div id="cosmo-hud-rows"></div>
+</div>
+
+    <div id="ow-origin">Origin: Earth</div>
+    <div id="ow-epoch">—</div>
+  </div>
+</div>
+
+<!-- ══ OBSERVER LOCATION PANEL ══════════════════════════════════════════════ -->
+<div id="obs-panel">
+  <div style="font-size:10px;font-weight:700;color:var(--m1,#00e5ff);margin-bottom:10px;">SET OBSERVER LOCATION</div>
+
+<!-- STARMAP unified JS -->
+<script src="/js/starmap.js"></script>
+
+</body>
+</html>

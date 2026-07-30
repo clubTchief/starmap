@@ -1,0 +1,38 @@
+# Build artifacts
+target/
+*.jar
+
+# IDE files
+.idea/
+*.iml
+.eclipse/
+.settings/
+.classpath
+.project
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Node (Puppeteer / Remotion)
+node_modules/
+starmap-video/
+out/
+
+# Logs
+*.log
+logs/
+
+# Satellite cache (fetched fresh at runtime)
+sat-cache/
+
+# Scripts not needed in image
+starmap-puppeteer.js
+starmap_demo.js
+starmap_book.js
+starmap_manual.js
+CLAUDE.md

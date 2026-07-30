@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  starmap:
+    build: .
+    image: starmap:latest
+    container_name: starmap
+    ports:
+      - "8080:8080"
+    environment:
+      GPS_SIMULATE: "true"                  # no physical GPS in container
+      OBSERVER_DEFAULT_LAT: "19.1334"      # Mumbai default observer
+      OBSERVER_DEFAULT_LON: "72.9133"
+      OBSERVER_DEFAULT_ALT: "14.0"
+      SAT_TRACK_NORAD_IDS: "25544"         # ISS; comma-separate more IDs
+      JAVA_OPTS: "-Xms256m -Xmx768m"
+    volumes:
+      # Persist the satellite OMM cache so CelesTrak isn't re-fetched on restart
+      - sat-cache:/app/sat-cache
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/status"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+volumes:
+  sat-cache:
