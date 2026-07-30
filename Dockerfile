@@ -11,24 +11,37 @@ RUN mvn package -DskipTests -q
 FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
-RUN apk add --no-cache wget curl
+RUN apk add --no-cache wget curl unzip
 
 RUN addgroup -S starmap && adduser -S starmap -G starmap
 
 COPY --from=builder --chown=starmap:starmap \
      /build/target/starmap-1.0.0.jar app.jar
 
-# Copy the orekit-data folder committed to the repo (UTC-TAI, IERS, EOP etc)
-COPY --chown=starmap:starmap orekit-data ./orekit-data
+# Download orekit-data from the Orekit GitLab archive
+# This is the canonical source with correct folder structure
+RUN mkdir -p /app/orekit-data && \
+    wget --timeout=180 -q \
+      "https://gitlab.orekit.org/orekit/orekit-data/-/archive/master/orekit-data-master.zip" \
+      -O /tmp/od.zip || \
+    wget --timeout=180 -q \
+      "https://github.com/CS-SI/Orekit/releases/download/12.1/orekit-data.zip" \
+      -O /tmp/od.zip && \
+    unzip -q /tmp/od.zip -d /tmp/oe && \
+    SUBDIR=$(ls /tmp/oe/) && \
+    echo "Found subdir: $SUBDIR" && \
+    cp -r /tmp/oe/$SUBDIR/. /app/orekit-data/ && \
+    rm -rf /tmp/od.zip /tmp/oe && \
+    find /app/orekit-data -name "tai-utc.dat" && \
+    echo "Orekit base: $(du -sh /app/orekit-data)"
 
-# Download DE440 from NASA JPL at build time
-# This is the only file too large to commit — ~114MB
+# Download DE440 from NASA JPL
 RUN wget --timeout=600 -q \
     "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440.bsp" \
     -O /app/orekit-data/de440.bsp && \
-    echo "DE440 downloaded: $(du -sh /app/orekit-data/de440.bsp)" && \
-    chown starmap:starmap /app/orekit-data/de440.bsp
+    echo "DE440: $(du -sh /app/orekit-data/de440.bsp)"
 
+RUN chown -R starmap:starmap /app/orekit-data
 USER starmap
 
 ENV SERVER_PORT=8080 \
