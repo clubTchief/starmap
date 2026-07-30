@@ -1,0 +1,5 @@
+# Git LFS tracking 
+*.bsp filter=lfs diff=lfs merge=lfs -text 
+*.ecsv filter=lfs diff=lfs merge=lfs -text 
+*.dat filter=lfs diff=lfs merge=lfs -text 
+*.tab filter=lfs diff=lfs merge=lfs -text 
