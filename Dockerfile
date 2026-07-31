@@ -11,24 +11,24 @@ RUN mvn package -DskipTests -q
 FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
-RUN apk add --no-cache wget
+RUN apk add --no-cache wget curl
 
 RUN addgroup -S starmap && adduser -S starmap -G starmap
 
 COPY --from=builder --chown=starmap:starmap \
      /build/target/starmap-1.0.0.jar app.jar
 
-# Copy complete orekit-data from repo (must include tai-utc.dat)
+# Copy the orekit-data folder from the repo
+# (must contain tai-utc.dat and other IERS files)
 COPY --chown=starmap:starmap orekit-data ./orekit-data
 
-# Download only DE440 — the one large file not in the repo
-RUN wget --timeout=600 -q \
+# Download only the ephemeris binary — DE421 is 17MB vs DE440's 115MB
+# Same visual accuracy for a visualisation app
+RUN wget --timeout=300 \
     "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de421.bsp" \
     -O /app/orekit-data/de421.bsp && \
     chown starmap:starmap /app/orekit-data/de421.bsp && \
-    echo "DE440: $(du -sh /app/orekit-data/de421.bsp)" && \
-    find /app/orekit-data -name "tai-utc.dat" && \
-    echo "All files: $(find /app/orekit-data -type f | wc -l)"
+    echo "DE421: $(du -sh /app/orekit-data/de421.bsp)"
 
 USER starmap
 
@@ -39,11 +39,11 @@ ENV SERVER_PORT=8080 \
     OBSERVER_DEFAULT_LON=72.9133 \
     OBSERVER_DEFAULT_ALT=14.0 \
     SAT_TRACK_NORAD_IDS=25544 \
-    JAVA_OPTS="-Xms512m -Xmx1536m"
+    JAVA_OPTS="-Xms512m -Xmx1024m"
 
 EXPOSE 8080
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
     CMD wget -qO- http://localhost:8080/api/status || exit 1
 
 ENTRYPOINT ["sh", "-c", \
