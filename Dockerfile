@@ -11,24 +11,20 @@ RUN mvn package -DskipTests -q
 FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
-RUN apk add --no-cache wget curl
+RUN apk add --no-cache wget
 
 RUN addgroup -S starmap && adduser -S starmap -G starmap
 
 COPY --from=builder --chown=starmap:starmap \
      /build/target/starmap-1.0.0.jar app.jar
 
-# Copy the orekit-data folder from the repo
-# (must contain tai-utc.dat and other IERS files)
+# orekit-data includes de421.bsp committed via Git LFS
+# No network downloads needed during build
 COPY --chown=starmap:starmap orekit-data ./orekit-data
 
-# Download only the ephemeris binary — DE421 is 17MB vs DE440's 115MB
-# Same visual accuracy for a visualisation app
-RUN wget --timeout=300 \
-    "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de421.bsp" \
-    -O /app/orekit-data/de421.bsp && \
-    chown starmap:starmap /app/orekit-data/de421.bsp && \
-    echo "DE421: $(du -sh /app/orekit-data/de421.bsp)"
+RUN ls -lh /app/orekit-data/ && \
+    find /app/orekit-data -name "*.bsp" && \
+    find /app/orekit-data -name "tai-utc.dat"
 
 USER starmap
 
