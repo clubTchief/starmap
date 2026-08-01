@@ -14,6 +14,7 @@ WORKDIR /app
 RUN apk add --no-cache wget
 
 RUN addgroup -S starmap && adduser -S starmap -G starmap
+RUN chown starmap:starmap /app
 
 COPY --from=builder --chown=starmap:starmap \
      /build/target/starmap-1.0.0.jar app.jar
@@ -101,7 +102,7 @@ ENV SERVER_PORT=8080 \
     OBSERVER_DEFAULT_LON=72.9133 \
     OBSERVER_DEFAULT_ALT=14.0 \
     SAT_TRACK_NORAD_IDS=25544 \
-    JAVA_OPTS="-Xms512m -Xmx1024m"
+    JAVA_OPTS="-Xms512m -Xmx1024m -Djava.net.preferIPv4Stack=true"
 
 EXPOSE 8080
 
