@@ -41,15 +41,31 @@ COPY --from=builder --chown=starmap:starmap \
 ARG RAILWAY_GIT_COMMIT_SHA=local
 RUN echo "Building orekit-data for commit ${RAILWAY_GIT_COMMIT_SHA}"
 
-COPY --chown=starmap:starmap orekit-data ./orekit-data
+COPY --chown=starmap:starmap orekit-data ./orekit-data-raw
 
-RUN rm -f /app/orekit-data/tai-utc.dat \
-          /app/orekit-data/de421.bsp \
-          /app/orekit-data/de440.bsp \
-          /app/orekit-data/fes2004_Cnm-Snm.dat \
+# We tried deleting the four Git-LFS-broken stub files (tai-utc.dat,
+# de421.bsp, de440.bsp, fes2004_Cnm-Snm.dat) out of the copied tree with
+# `rm -f`, and verified across four different build environments (Railway
+# cached, Railway with a cache-busting ARG, GitHub Actions with
+# --no-cache, and a pinned immutable commit-SHA image) that the deletion
+# never actually stuck in the final image — every one of them still had
+# the broken files at runtime, right alongside files added in the very
+# same RUN step. Rather than keep chasing why `rm` doesn't survive into
+# the exported layer, we sidestep it entirely: build a brand new
+# orekit-data directory containing ONLY the pieces we've confirmed are
+# real and needed, so the broken files are simply never copied into it
+# in the first place.
+RUN mkdir -p /app/orekit-data \
+    && cp -r /app/orekit-data-raw/DE-440-ephemerides         /app/orekit-data/ \
+    && cp -r /app/orekit-data-raw/Earth-Orientation-Parameters /app/orekit-data/ \
+    && cp -r /app/orekit-data-raw/CSSI-Space-Weather-Data     /app/orekit-data/ \
+    && cp -r /app/orekit-data-raw/MSAFE                      /app/orekit-data/ \
+    && cp -r /app/orekit-data-raw/Potential                  /app/orekit-data/ \
+    && cp /app/orekit-data-raw/itrf-versions.conf             /app/orekit-data/ \
+    && rm -rf /app/orekit-data-raw \
     && wget -q "https://hpiers.obspm.fr/eoppc/bul/bulc/UTC-TAI.history" \
             -O /app/orekit-data/UTC-TAI.history \
-    && chown starmap:starmap /app/orekit-data/UTC-TAI.history
+    && chown -R starmap:starmap /app/orekit-data
 
 # Fail the build loudly instead of failing silently at Orekit startup:
 #  - leap seconds: UTC-TAI.history must exist and be a real size
@@ -59,7 +75,13 @@ RUN rm -f /app/orekit-data/tai-utc.dat \
 #    checkout/copy step wouldn't otherwise be caught until EphemerisService
 #    fails at runtime.
 RUN echo "── orekit-data contents ──" \
-    && find /app/orekit-data -maxdepth 2 -type f -exec ls -la {} \; \
+    && find /app/orekit-data -type f -exec ls -la {} \; \
+    && for bad in tai-utc.dat de421.bsp de440.bsp fes2004_Cnm-Snm.dat; do \
+         if [ -e "/app/orekit-data/$bad" ]; then \
+           echo "STILL PRESENT (should have been excluded): $bad" && exit 1; \
+         fi; \
+       done \
+    && echo "confirmed: no broken LFS-stub files in the image" \
     && find /app/orekit-data -maxdepth 1 -name "UTC-TAI.history" -size +1k -print -quit \
         | grep -q . \
     && echo "orekit-data leap-second file looks good" \
