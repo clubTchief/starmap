@@ -11,20 +11,39 @@ RUN mvn package -DskipTests -q
 FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
-RUN apk add --no-cache wget
+RUN apk add --no-cache wget unzip
 
 RUN addgroup -S starmap && adduser -S starmap -G starmap
 
 COPY --from=builder --chown=starmap:starmap \
      /build/target/starmap-1.0.0.jar app.jar
 
-# orekit-data includes de421.bsp committed via Git LFS
-# No network downloads needed during build
-COPY --chown=starmap:starmap orekit-data ./orekit-data
+# ── Orekit reference data ───────────────────────────────────────────────────
+# NOTE: We do NOT copy orekit-data/ from the repo. The vendored copy in git
+# relies on Git LFS for tai-utc.dat, de421.bsp, de440.bsp, and
+# fes2004_Cnm-Snm.dat (see .gitattributes), and Railway's build clone does
+# not resolve LFS pointers — it was silently checking out ~130-byte LFS
+# pointer stubs in place of the real files, which broke leap-second loading
+# at startup (tai-utc.dat).
+#
+# Instead we fetch the current official convenience archive fresh, every
+# build, straight from the Orekit project. This also means the data stays
+# current without us having to manually update the vendored copy.
+RUN wget -q "https://gitlab.orekit.org/orekit/orekit-data/-/archive/main/orekit-data-main.zip" \
+        -O /tmp/orekit-data.zip \
+    && unzip -q /tmp/orekit-data.zip -d /app \
+    && mv /app/orekit-data-main /app/orekit-data \
+    && rm /tmp/orekit-data.zip
 
+# Fail the build loudly (not silently at runtime) if the fetch ever regresses
+# back to stub-sized files.
 RUN ls -lh /app/orekit-data/ && \
-    find /app/orekit-data -name "*.bsp" && \
-    find /app/orekit-data -name "tai-utc.dat"
+    find /app/orekit-data -name "tai-utc.dat"  -size +1k -print -quit | grep -q . && \
+    find /app/orekit-data -name "de440.bsp"     -size +1M -print -quit | grep -q . && \
+    echo "orekit-data looks good" \
+    || (echo "orekit-data fetch produced undersized files" && exit 1)
+
+RUN chown -R starmap:starmap /app/orekit-data
 
 USER starmap
 
