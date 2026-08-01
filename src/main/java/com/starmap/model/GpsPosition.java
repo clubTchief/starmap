@@ -11,6 +11,7 @@ public class GpsPosition {
 
     /** 0 = no fix, 1 = GPS, 2 = DGPS */
     public int    fixQuality;
+    public boolean simulated;     // true when running via gps.simulate=true
     public double latitude;       // degrees N positive
     public double longitude;      // degrees E positive
     public double altitude;       // metres above MSL

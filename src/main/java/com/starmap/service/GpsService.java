@@ -72,6 +72,7 @@ public class GpsService {
     @PostConstruct
     public void start() {
         running = true;
+        nmeaParser.getPosition().simulated = simulate;
         if (simulate) {
             log.info("GPS: running in SIMULATION mode (Powai walk)");
             simExecutor = Executors.newSingleThreadScheduledExecutor(
@@ -182,6 +183,7 @@ public class GpsService {
     private GpsPosition shallowCopy(GpsPosition src) {
         GpsPosition c = new GpsPosition();
         c.fixQuality     = src.fixQuality;
+        c.simulated      = src.simulated;
         c.latitude       = src.latitude;
         c.longitude      = src.longitude;
         c.altitude       = src.altitude;

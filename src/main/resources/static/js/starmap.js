@@ -66,16 +66,7 @@ function initGlobe() {
     selectionIndicator:   false,
     shadows:              false,
     imageryProvider:      false,
-    skyBox: new Cesium.SkyBox({
-      sources: {
-        positiveX: Cesium.buildModuleUrl('Assets/Textures/SkyBox/tycho2t3_80_px.jpg'),
-        negativeX: Cesium.buildModuleUrl('Assets/Textures/SkyBox/tycho2t3_80_mx.jpg'),
-        positiveY: Cesium.buildModuleUrl('Assets/Textures/SkyBox/tycho2t3_80_py.jpg'),
-        negativeY: Cesium.buildModuleUrl('Assets/Textures/SkyBox/tycho2t3_80_my.jpg'),
-        positiveZ: Cesium.buildModuleUrl('Assets/Textures/SkyBox/tycho2t3_80_pz.jpg'),
-        negativeZ: Cesium.buildModuleUrl('Assets/Textures/SkyBox/tycho2t3_80_mz.jpg')
-      }
-    }),
+    // skyBox: uses Cesium default star field (works on all deployments)
     contextOptions: { webgl: { alpha: false, antialias: true } }
   });
 
@@ -740,7 +731,11 @@ function ecefToC3(ecef) {
 function updatePositionTab(pos) {
   const badge = document.getElementById('fix-badge');
   badge.className = 'fix-badge ' + (['fix-none','fix-gps','fix-dgps'][pos.fixQuality] || 'fix-none');
-  badge.textContent = (['NO FIX','GPS FIX','DGPS FIX'][pos.fixQuality] || 'NO FIX');
+  if (pos.simulated && pos.fixQuality > 0) {
+    badge.textContent = 'GPS SIM';
+  } else {
+    badge.textContent = (['NO FIX','GPS FIX','DGPS FIX'][pos.fixQuality] || 'NO FIX');
+  }
 
   set('pos-lat',  Math.abs(pos.latitude).toFixed(7)  + '° ' + (pos.latitude  >= 0 ? 'N' : 'S'));
   set('pos-lon',  Math.abs(pos.longitude).toFixed(7) + '° ' + (pos.longitude >= 0 ? 'E' : 'W'));
@@ -2647,7 +2642,7 @@ function renderBodies(bodies) {
   // vector in geocentric modes (so it appears correctly relative to Earth).
   const sunBody = bodies.find(b => b.id === 'sun');
   const sunCart = activeFrameMode >= 3
-    ? Cesium.Cartesian3.ZERO
+    ? new Cesium.Cartesian3(1, 1, 1)  // tiny offset — exact ZERO gets frustum-culled
     : (sunBody ? bodyToCart(sunBody) : null);
 
   if (sunCart) {
@@ -3931,12 +3926,18 @@ function handleStarmapSnapshot(snap) {
   }
 
   // Cosmic layer
-  if (snap.bodies) {
+  if (snap.bodies && snap.bodies.length > 0) {
     window._bodies = snap.bodies;
     window._lastBodiesById = {};
     snap.bodies.forEach(b => { window._lastBodiesById[b.id] = b; });
-    if (activeFrameMode > 0) renderBodies(snap.bodies);
-    else hideCelestialBodies();
+    if (activeFrameMode > 0) {
+      renderBodies(snap.bodies);
+    } else {
+      // In GNSS mode still render Sun/Moon glows (they use geocentric posKey)
+      renderBodies(snap.bodies);
+    }
+  } else if (snap.bodies && snap.bodies.length === 0) {
+    console.warn('SSE bodies array is empty — ephemeris may not be ready yet');
   }
   if (snap.frameContext) {
     window._lastFrameContext = snap.frameContext;
