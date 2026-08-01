@@ -51,12 +51,25 @@ RUN rm -f /app/orekit-data/tai-utc.dat \
             -O /app/orekit-data/UTC-TAI.history \
     && chown starmap:starmap /app/orekit-data/UTC-TAI.history
 
-# Fail the build loudly if the leap-second file ever comes back undersized
-# instead of failing silently at Orekit startup like before.
-RUN find /app/orekit-data -maxdepth 1 -name "UTC-TAI.history" -size +1k -print -quit \
+# Fail the build loudly instead of failing silently at Orekit startup:
+#  - leap seconds: UTC-TAI.history must exist and be a real size
+#  - planetary ephemeris: JPLEphemeridesLoader recognizes [lu]nx[mp]####.ddd
+#    (e.g. lnxp1990.440) — confirm one is actually present, recursively,
+#    since it lives in a subdirectory (DE-440-ephemerides/) and a broken
+#    checkout/copy step wouldn't otherwise be caught until EphemerisService
+#    fails at runtime.
+RUN echo "── orekit-data contents ──" \
+    && find /app/orekit-data -maxdepth 2 -type f -exec ls -la {} \; \
+    && find /app/orekit-data -maxdepth 1 -name "UTC-TAI.history" -size +1k -print -quit \
         | grep -q . \
     && echo "orekit-data leap-second file looks good" \
     || (echo "UTC-TAI.history fetch produced an undersized file" && exit 1)
+
+RUN find /app/orekit-data -regextype posix-extended \
+        -regex '.*/[lu]nx[mp][0-9]{4}\.[0-9]{3}' -size +1M -print -quit \
+        | grep -q . \
+    && echo "orekit-data JPL ephemeris file looks good" \
+    || (echo "No JPL ephemeris file (lnxp*.### / unxp*.###) found at real size" && exit 1)
 
 USER starmap
 
