@@ -33,6 +33,14 @@ COPY --from=builder --chown=starmap:starmap \
 # this app never loads an ocean tide model. tai-utc.dat (leap seconds) IS
 # needed, so we drop the broken stub and fetch Orekit's other supported
 # leap-second format straight from its IERS source of truth instead.
+# Cache-buster: Railway injects the current commit SHA as this build arg
+# when it's declared. Referencing it below means every commit produces a
+# genuinely new layer here, so a stale/corrupted cache entry can never be
+# silently reused for this step or anything after it (this is what bit us
+# last deploy — the rm+wget layer got served from an old cached build).
+ARG RAILWAY_GIT_COMMIT_SHA=local
+RUN echo "Building orekit-data for commit ${RAILWAY_GIT_COMMIT_SHA}"
+
 COPY --chown=starmap:starmap orekit-data ./orekit-data
 
 RUN rm -f /app/orekit-data/tai-utc.dat \
