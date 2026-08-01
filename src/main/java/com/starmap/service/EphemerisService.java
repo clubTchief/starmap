@@ -18,6 +18,7 @@ import org.orekit.utils.IERSConventions;
 import org.orekit.utils.PVCoordinates;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -38,6 +39,7 @@ import java.util.*;
  *   ITRF     — Earth-fixed (for GMST/GAST/observer computations)
  */
 @Service
+@DependsOn("orekitConfig")
 public class EphemerisService {
 
     private static final Logger log = LoggerFactory.getLogger(EphemerisService.class);

@@ -23,6 +23,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.stereotype.Service;
 
 import java.io.*;
@@ -46,6 +47,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * via the sat.track.norad-ids property or POST /api/sat/add?noradId=N.
  */
 @Service
+@DependsOn("orekitConfig")
 public class SatelliteTrackingService {
 
     private static final Logger log = LoggerFactory.getLogger(SatelliteTrackingService.class);
