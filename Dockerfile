@@ -65,11 +65,10 @@ RUN echo "── orekit-data contents ──" \
     && echo "orekit-data leap-second file looks good" \
     || (echo "UTC-TAI.history fetch produced an undersized file" && exit 1)
 
-RUN find /app/orekit-data -regextype posix-extended \
-        -regex '.*/[lu]nx[mp][0-9]{4}\.[0-9]{3}' -size +1M -print -quit \
-        | grep -q . \
+RUN test -f /app/orekit-data/DE-440-ephemerides/lnxp1990.440 \
+    && [ "$(wc -c < /app/orekit-data/DE-440-ephemerides/lnxp1990.440)" -gt 1000000 ] \
     && echo "orekit-data JPL ephemeris file looks good" \
-    || (echo "No JPL ephemeris file (lnxp*.### / unxp*.###) found at real size" && exit 1)
+    || (echo "DE-440-ephemerides/lnxp1990.440 is missing or undersized" && exit 1)
 
 USER starmap
 
