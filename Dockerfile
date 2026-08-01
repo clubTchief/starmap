@@ -11,7 +11,7 @@ RUN mvn package -DskipTests -q
 FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
-RUN apk add --no-cache wget unzip
+RUN apk add --no-cache wget
 
 RUN addgroup -S starmap && adduser -S starmap -G starmap
 
@@ -19,31 +19,36 @@ COPY --from=builder --chown=starmap:starmap \
      /build/target/starmap-1.0.0.jar app.jar
 
 # ── Orekit reference data ───────────────────────────────────────────────────
-# NOTE: We do NOT copy orekit-data/ from the repo. The vendored copy in git
-# relies on Git LFS for tai-utc.dat, de421.bsp, de440.bsp, and
-# fes2004_Cnm-Snm.dat (see .gitattributes), and Railway's build clone does
-# not resolve LFS pointers — it was silently checking out ~130-byte LFS
-# pointer stubs in place of the real files, which broke leap-second loading
-# at startup (tai-utc.dat).
+# The vendored orekit-data/ folder is real and correct for almost everything
+# (DE440 ephemeris, EOP, gravity field, space weather, MSAFE) — those are
+# plain git blobs. But four files are Git-LFS-tracked (see .gitattributes:
+# *.bsp, *.dat, *.tab, *.ecsv) and Railway's build clone does not resolve
+# LFS pointers, so tai-utc.dat / de421.bsp / de440.bsp /
+# fes2004_Cnm-Snm.dat land in the image as ~130-byte pointer stubs, not
+# real data. (A GitLab archive re-download hits the exact same problem —
+# GitLab doesn't include LFS objects in generated archives either.)
 #
-# Instead we fetch the current official convenience archive fresh, every
-# build, straight from the Orekit project. This also means the data stays
-# current without us having to manually update the vendored copy.
-RUN wget -q "https://gitlab.orekit.org/orekit/orekit-data/-/archive/main/orekit-data-main.zip" \
-        -O /tmp/orekit-data.zip \
-    && unzip -q /tmp/orekit-data.zip -d /app \
-    && mv /app/orekit-data-main /app/orekit-data \
-    && rm /tmp/orekit-data.zip
+# de421.bsp / de440.bsp / fes2004_Cnm-Snm.dat aren't needed: planetary
+# positions come from the already-real DE-440-ephemerides/*.440 file, and
+# this app never loads an ocean tide model. tai-utc.dat (leap seconds) IS
+# needed, so we drop the broken stub and fetch Orekit's other supported
+# leap-second format straight from its IERS source of truth instead.
+COPY --chown=starmap:starmap orekit-data ./orekit-data
 
-# Fail the build loudly (not silently at runtime) if the fetch ever regresses
-# back to stub-sized files.
-RUN ls -lh /app/orekit-data/ && \
-    find /app/orekit-data -name "tai-utc.dat"  -size +1k -print -quit | grep -q . && \
-    find /app/orekit-data -name "de440.bsp"     -size +1M -print -quit | grep -q . && \
-    echo "orekit-data looks good" \
-    || (echo "orekit-data fetch produced undersized files" && exit 1)
+RUN rm -f /app/orekit-data/tai-utc.dat \
+          /app/orekit-data/de421.bsp \
+          /app/orekit-data/de440.bsp \
+          /app/orekit-data/fes2004_Cnm-Snm.dat \
+    && wget -q "https://hpiers.obspm.fr/eoppc/bul/bulc/UTC-TAI.history" \
+            -O /app/orekit-data/UTC-TAI.history \
+    && chown starmap:starmap /app/orekit-data/UTC-TAI.history
 
-RUN chown -R starmap:starmap /app/orekit-data
+# Fail the build loudly if the leap-second file ever comes back undersized
+# instead of failing silently at Orekit startup like before.
+RUN find /app/orekit-data -maxdepth 1 -name "UTC-TAI.history" -size +1k -print -quit \
+        | grep -q . \
+    && echo "orekit-data leap-second file looks good" \
+    || (echo "UTC-TAI.history fetch produced an undersized file" && exit 1)
 
 USER starmap
 
