@@ -208,7 +208,7 @@ public class ConstellationService {
         return result;
     }
 
-    private double[] computeAzEl(PVCoordinates pvEcef,
+    double[] computeAzEl(PVCoordinates pvEcef,
                                   double latDeg, double lonDeg, double altM) {
         double lat = Math.toRadians(latDeg);
         double lon = Math.toRadians(lonDeg);

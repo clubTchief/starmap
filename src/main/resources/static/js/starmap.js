@@ -746,9 +746,10 @@ function updatePositionTab(pos) {
   const _nfb = document.getElementById('no-fix-banner'); if(_nfb) _nfb.style.display = (pos.fixQuality === 0) ? 'block' : 'none';
 }
 
-function updateSigGrid(sats, ggaUsed) {
+function updateSigGrid(sats, ggaUsed, staleConstellations) {
   const ALL_CONS = ['G','R','E','B','Q'];
   const META = { G:'GPS', R:'GLO', E:'GAL', B:'BDS', Q:'QZSS', I:'IRNSS', S:'SBAS' };
+  const stale = new Set(staleConstellations || []);
 
   // Seed all base constellations at 0/0
   const counts  = {};
@@ -781,11 +782,15 @@ function updateSigGrid(sats, ggaUsed) {
     const label = META[p] || p;
     const pct   = total > 0 ? Math.round(used / total * 100) : 0;
     const dim   = total === 0 ? 'opacity:0.4;' : '';
+    const isStale = stale.has(p);
+    const staleTag = isStale
+      ? `<span title="Live elements haven't refreshed recently — showing last known data" style="color:#ff6b6b;font-size:9px;margin-left:3px;">&#9888;</span>`
+      : '';
     return `
       <div style="display:flex;align-items:center;gap:8px;${dim}">
-        <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${col};width:52px;flex-shrink:0;white-space:nowrap;">${p} · ${label}</span>
+        <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${col};width:52px;flex-shrink:0;white-space:nowrap;">${p} · ${label}${staleTag}</span>
         <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden;">
-          <div style="height:100%;width:${pct}%;background:${col};border-radius:3px;transition:width .4s;"></div>
+          <div style="height:100%;width:${pct}%;background:${isStale ? '#ff6b6b' : col};border-radius:3px;transition:width .4s;"></div>
         </div>
         <span style="font-family:var(--mono);font-size:11px;font-weight:600;white-space:nowrap;min-width:40px;text-align:right;">
           <span style="color:${col};">${used}</span><span style="color:var(--muted);">/${total}</span>
@@ -832,10 +837,10 @@ const CONS_PREFIX = {
 // Show 0/0 for all constellations immediately on page load (PRN_COLOR now defined)
 updateSigGrid([]);
 
-function updateSkyTab(sats, ggaUsed) {
+function updateSkyTab(sats, ggaUsed, staleConstellations) {
   updateSkyPlot(sats);
   updateSatList(sats);
-  updateSigGrid(sats, ggaUsed);
+  updateSigGrid(sats, ggaUsed, staleConstellations);
 }
 
 function updateSkyPlot(sats) {
@@ -1759,6 +1764,8 @@ function updateSatPanel(s) {
     set(`sat-inc-${s.noradId}`,  s.inclinationDeg!= null ? s.inclinationDeg.toFixed(2) + '°' : '--');
     set(`sat-per-${s.noradId}`,  s.periodMin     != null ? s.periodMin.toFixed(2)    + ' min' : '--');
     set(`sat-age-${s.noradId}`,  s.ommAge ? 'OMM: ' + s.ommAge : '');
+    const ageEl = document.getElementById(`sat-age-${s.noradId}`);
+    if (ageEl) ageEl.style.color = s.ommStale ? '#ff6b6b' : '';
     // Pass list
     const passDiv = document.getElementById(`sat-passes-${s.noradId}`);
     if (passDiv && s.nextPasses) passDiv.innerHTML = buildPassHtml(s.nextPasses);
@@ -1780,7 +1787,7 @@ function buildSatCardHtml(s, col) {
     </div>
     <div style="font-family:var(--mono);font-size:9px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:6px;">
       <span>NORAD ${s.noradId}</span>
-      <span id="sat-age-${s.noradId}">${s.ommAge ? 'OMM: '+s.ommAge : ''}</span>
+      <span id="sat-age-${s.noradId}" style="${s.ommStale ? 'color:#ff6b6b;' : ''}">${s.ommAge ? 'OMM: '+s.ommAge : ''}</span>
     </div>
   </div>
   <div class="kv" style="margin-bottom:8px;">
@@ -3903,7 +3910,7 @@ function handleStarmapSnapshot(snap) {
     latestSatsMap = {};
     snap.satellites.forEach(s => { latestSatsMap[s.prn] = s; });
     const ggaUsed = snap.position ? snap.position.satellitesUsed : null;
-    updateSkyTab(snap.satellites, ggaUsed);
+    updateSkyTab(snap.satellites, ggaUsed, snap.staleConstellations);
   }
   if (snap.recentTrack) updateTrackTab(snap.recentTrack);
   if (snap.frameInspector) { frameData = snap.frameInspector; updateFrameTab(snap.frameInspector); }

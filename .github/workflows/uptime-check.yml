@@ -1,0 +1,38 @@
+name: Uptime check
+
+# Runs on GitHub's own schedule, independent of any deploy — this is the
+# thing that answers "did anyone notice the app went down" without a
+# person having to remember to look at Railway logs.
+#
+# A failed run triggers GitHub's default email notification to the repo
+# owner/watchers — no external service or webhook needed to get started.
+# If you want Slack/SMS instead, swap the final step for a webhook POST.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /actuator/health
+        run: |
+          URL="https://starmap-production-fbf2.up.railway.app/actuator/health"
+          echo "Checking $URL"
+          STATUS=$(curl -s -o /tmp/health.json -w "%{http_code}" --max-time 15 "$URL" || echo "000")
+          echo "HTTP status: $STATUS"
+          cat /tmp/health.json 2>/dev/null || true
+
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::Health check failed with status $STATUS"
+            exit 1
+          fi
+
+          BODY_STATUS=$(python3 -c "import json,sys; print(json.load(open('/tmp/health.json')).get('status','UNKNOWN'))" 2>/dev/null || echo "UNKNOWN")
+          if [ "$BODY_STATUS" != "UP" ]; then
+            echo "::error::App reports status '$BODY_STATUS', expected 'UP'"
+            exit 1
+          fi
+
+          echo "Healthy — status UP"

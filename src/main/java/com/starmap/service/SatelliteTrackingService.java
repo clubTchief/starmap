@@ -342,7 +342,7 @@ public class SatelliteTrackingService {
 
     // ── Minimal JSON field extractors (no external parser needed) ─────────────
 
-    private String extractStr(String json, String key) {
+    String extractStr(String json, String key) {
         String search = "\"" + key + "\"";
         int idx = json.indexOf(search);
         if (idx < 0) return null;
@@ -355,7 +355,7 @@ public class SatelliteTrackingService {
         return json.substring(start + 1, end);
     }
 
-    private double extractDbl(String json, String key) {
+    double extractDbl(String json, String key) {
         String search = "\"" + key + "\"";
         int idx = json.indexOf(search);
         if (idx < 0) return 0.0;

@@ -83,17 +83,25 @@ public class StarmapSseService {
 
         SseEmitter emitter = new SseEmitter(0L);
         emitters.add(emitter);
-        Runnable release = () -> {
-            emitters.remove(emitter);
-            AtomicInteger count = connectionsByIp.get(clientIp);
-            if (count != null && count.decrementAndGet() <= 0) connectionsByIp.remove(clientIp, count);
-        };
+        Runnable release = () -> releaseConnection(clientIp, emitter);
         emitter.onCompletion(release::run);
         emitter.onTimeout(release::run);
         emitter.onError(e -> release.run());
         log.debug("SSE client connected ({}) — {} total, {} from this IP",
                    clientIp, emitters.size(), perIp.get());
         return emitter;
+    }
+
+    /** Releases a connection's slot, freeing it for reuse. Pulled out as
+     *  its own method so tests can exercise the release logic directly,
+     *  rather than depending on Spring's internal request-lifecycle wiring
+     *  (which only actually invokes onCompletion callbacks once the
+     *  emitter is running inside a real async HTTP request — something a
+     *  plain unit test doesn't have). */
+    void releaseConnection(String clientIp, SseEmitter emitter) {
+        emitters.remove(emitter);
+        AtomicInteger count = connectionsByIp.get(clientIp);
+        if (count != null && count.decrementAndGet() <= 0) connectionsByIp.remove(clientIp, count);
     }
 
     @Scheduled(fixedRateString = "${starmap.sse.interval-ms:1000}")
@@ -142,6 +150,7 @@ public class StarmapSseService {
                 snap.frameContext = ephemerisService.computeFrameContext(epoch, obs);
             }
             snap.observer = obs;
+            snap.staleConstellations = constellationService.getStaleConstellations();
 
             // ── Broadcast ─────────────────────────────────────────────
             String json = mapper.writeValueAsString(snap);

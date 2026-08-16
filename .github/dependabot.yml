@@ -1,0 +1,29 @@
+version: 2
+updates:
+  # Java/Maven dependencies — Spring Boot, Orekit, Hipparchus, jSerialComm, etc.
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    # Orekit and Hipparchus are tightly version-coupled (Orekit 12.1 needs
+    # a matching Hipparchus 3.x line) — group them so Dependabot proposes
+    # compatible updates together rather than one at a time, which could
+    # otherwise land a half-updated, mismatched pair.
+    groups:
+      orekit-stack:
+        patterns:
+          - "org.orekit:*"
+          - "org.hipparchus:*"
+
+  # GitHub Actions used in the CI/CD workflow itself
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "ci"

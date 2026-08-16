@@ -1,5 +1,6 @@
 package com.starmap.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.*;
 
@@ -9,6 +10,13 @@ import org.springframework.web.servlet.config.annotation.*;
  */
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
+
+    // Was allowedOriginPatterns("*") — fine for local dev, unnecessarily
+    // open on a public deployment. Defaults to the app's own Railway URL
+    // plus localhost for local development; override via
+    // starmap.cors.allowed-origins for any other frontend that needs access.
+    @Value("${starmap.cors.allowed-origins:https://starmap-production-fbf2.up.railway.app,http://localhost:8080,http://localhost:3000}")
+    private String allowedOrigins;
 
     @Override
     public void addViewControllers(ViewControllerRegistry registry) {
@@ -23,9 +31,8 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
-        // Allow local dev tools (e.g. browser direct-open) to hit the API
         registry.addMapping("/api/**")
-                .allowedOriginPatterns("*")
-                .allowedMethods("GET", "POST", "OPTIONS");
+                .allowedOrigins(allowedOrigins.split(","))
+                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS");
     }
 }

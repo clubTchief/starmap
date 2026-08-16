@@ -27,4 +27,11 @@ public class StarmapSnapshot {
 
     // ── Observer ─────────────────────────────────────────────────────────
     public ObserverState        observer;         // current observer position
+
+    // ── Health/degradation signals ───────────────────────────────────────
+    /** Constellation codes (G/R/E/C/J) whose elements haven't refreshed
+     *  successfully in over 2x the normal interval — lets the frontend show
+     *  a "tracking degraded" indicator instead of silently serving stale
+     *  positions as current. Empty list when everything's healthy. */
+    public List<String>         staleConstellations;
 }
