@@ -1,25 +1,13 @@
-# ── Stage 1: Build ────────────────────────────────────────────────────────────
-FROM maven:3.9-eclipse-temurin-17-alpine AS builder
+# ── Stage 1: Orekit data prep ────────────────────────────────────────────────
+# Isolated into its own stage so BOTH the Maven build (which now runs the
+# StarmapApplicationTests context-load smoke test) and the final runtime
+# image can use the exact same, verified-correct orekit-data — without
+# needing a full JDK/Maven toolchain just to assemble a data directory.
+FROM alpine:3.19 AS orekit-prep
 
-WORKDIR /build
-COPY pom.xml .
-RUN mvn dependency:go-offline -q
-COPY src ./src
-RUN mvn package -DskipTests -q
-
-# ── Stage 2: Runtime ──────────────────────────────────────────────────────────
-FROM eclipse-temurin:17-jre-alpine
-
-WORKDIR /app
+WORKDIR /prep
 RUN apk add --no-cache wget
 
-RUN addgroup -S starmap && adduser -S starmap -G starmap
-RUN chown starmap:starmap /app
-
-COPY --from=builder --chown=starmap:starmap \
-     /build/target/starmap-1.0.0.jar app.jar
-
-# ── Orekit reference data ───────────────────────────────────────────────────
 # The vendored orekit-data/ folder is real and correct for almost everything
 # (DE440 ephemeris, EOP, gravity field, space weather, MSAFE) — those are
 # plain git blobs. But four files are Git-LFS-tracked (see .gitattributes:
@@ -38,11 +26,12 @@ COPY --from=builder --chown=starmap:starmap \
 # when it's declared. Referencing it below means every commit produces a
 # genuinely new layer here, so a stale/corrupted cache entry can never be
 # silently reused for this step or anything after it (this is what bit us
-# last deploy — the rm+wget layer got served from an old cached build).
+# on an earlier deploy — the rm+wget layer got served from an old cached
+# build).
 ARG RAILWAY_GIT_COMMIT_SHA=local
 RUN echo "Building orekit-data for commit ${RAILWAY_GIT_COMMIT_SHA}"
 
-COPY --chown=starmap:starmap orekit-data ./orekit-data-raw
+COPY orekit-data ./orekit-data-raw
 
 # We tried deleting the four Git-LFS-broken stub files (tai-utc.dat,
 # de421.bsp, de440.bsp, fes2004_Cnm-Snm.dat) out of the copied tree with
@@ -56,17 +45,16 @@ COPY --chown=starmap:starmap orekit-data ./orekit-data-raw
 # orekit-data directory containing ONLY the pieces we've confirmed are
 # real and needed, so the broken files are simply never copied into it
 # in the first place.
-RUN mkdir -p /app/orekit-data \
-    && cp -r /app/orekit-data-raw/DE-440-ephemerides         /app/orekit-data/ \
-    && cp -r /app/orekit-data-raw/Earth-Orientation-Parameters /app/orekit-data/ \
-    && cp -r /app/orekit-data-raw/CSSI-Space-Weather-Data     /app/orekit-data/ \
-    && cp -r /app/orekit-data-raw/MSAFE                      /app/orekit-data/ \
-    && cp -r /app/orekit-data-raw/Potential                  /app/orekit-data/ \
-    && cp /app/orekit-data-raw/itrf-versions.conf             /app/orekit-data/ \
-    && rm -rf /app/orekit-data-raw \
+RUN mkdir -p ./orekit-data \
+    && cp -r ./orekit-data-raw/DE-440-ephemerides         ./orekit-data/ \
+    && cp -r ./orekit-data-raw/Earth-Orientation-Parameters ./orekit-data/ \
+    && cp -r ./orekit-data-raw/CSSI-Space-Weather-Data     ./orekit-data/ \
+    && cp -r ./orekit-data-raw/MSAFE                      ./orekit-data/ \
+    && cp -r ./orekit-data-raw/Potential                  ./orekit-data/ \
+    && cp ./orekit-data-raw/itrf-versions.conf             ./orekit-data/ \
+    && rm -rf ./orekit-data-raw \
     && wget -q "https://hpiers.obspm.fr/eoppc/bul/bulc/UTC-TAI.history" \
-            -O /app/orekit-data/UTC-TAI.history \
-    && chown -R starmap:starmap /app/orekit-data
+            -O ./orekit-data/UTC-TAI.history
 
 # Fail the build loudly instead of failing silently at Orekit startup:
 #  - leap seconds: UTC-TAI.history must exist and be a real size
@@ -76,22 +64,52 @@ RUN mkdir -p /app/orekit-data \
 #    checkout/copy step wouldn't otherwise be caught until EphemerisService
 #    fails at runtime.
 RUN echo "── orekit-data contents ──" \
-    && find /app/orekit-data -type f -exec ls -la {} \; \
+    && find ./orekit-data -type f -exec ls -la {} \; \
     && for bad in tai-utc.dat de421.bsp de440.bsp fes2004_Cnm-Snm.dat; do \
-         if [ -e "/app/orekit-data/$bad" ]; then \
+         if [ -e "./orekit-data/$bad" ]; then \
            echo "STILL PRESENT (should have been excluded): $bad" && exit 1; \
          fi; \
        done \
     && echo "confirmed: no broken LFS-stub files in the image" \
-    && find /app/orekit-data -maxdepth 1 -name "UTC-TAI.history" -size +1k -print -quit \
+    && find ./orekit-data -maxdepth 1 -name "UTC-TAI.history" -size +1k -print -quit \
         | grep -q . \
     && echo "orekit-data leap-second file looks good" \
     || (echo "UTC-TAI.history fetch produced an undersized file" && exit 1)
 
-RUN test -f /app/orekit-data/DE-440-ephemerides/lnxp1990.440 \
-    && [ "$(wc -c < /app/orekit-data/DE-440-ephemerides/lnxp1990.440)" -gt 1000000 ] \
+RUN test -f ./orekit-data/DE-440-ephemerides/lnxp1990.440 \
+    && [ "$(wc -c < ./orekit-data/DE-440-ephemerides/lnxp1990.440)" -gt 1000000 ] \
     && echo "orekit-data JPL ephemeris file looks good" \
     || (echo "DE-440-ephemerides/lnxp1990.440 is missing or undersized" && exit 1)
+
+# ── Stage 2: Build + test ────────────────────────────────────────────────────
+FROM maven:3.9-eclipse-temurin-17-alpine AS builder
+
+WORKDIR /build
+COPY pom.xml .
+RUN mvn dependency:go-offline -q
+COPY src ./src
+
+# orekit-data is needed here now too: StarmapApplicationTests boots the full
+# Spring context (including OrekitConfig and every @DependsOn-ordered
+# service), so a missing/broken orekit-data would fail the test — which is
+# exactly the point. Tests are no longer skipped: this is the build's one
+# real check that the app can actually start before an image ships.
+COPY --from=orekit-prep /prep/orekit-data ./orekit-data
+RUN mvn package -q
+
+# ── Stage 3: Runtime ──────────────────────────────────────────────────────────
+FROM eclipse-temurin:17-jre-alpine
+
+WORKDIR /app
+RUN apk add --no-cache wget
+
+RUN addgroup -S starmap && adduser -S starmap -G starmap
+RUN chown starmap:starmap /app
+
+COPY --from=builder --chown=starmap:starmap \
+     /build/target/starmap-1.0.0.jar app.jar
+
+COPY --from=orekit-prep --chown=starmap:starmap /prep/orekit-data ./orekit-data
 
 USER starmap
 

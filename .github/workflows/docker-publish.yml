@@ -42,4 +42,40 @@ jobs:
           no-cache: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:production
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      # Closes the loop that used to be manual: push -> wait for Actions ->
+      # copy the new SHA -> paste into Railway -> redeploy, by hand, every
+      # time. Railway's service should be configured to track the
+      # ":production" tag (a stable, non-"latest" tag Railway won't try to
+      # auto-manage) — this step tells Railway to redeploy that tag right
+      # now instead of waiting for its own auto-update detection, which can
+      # take hours. Requires a RAILWAY_TOKEN repo secret (Railway dashboard
+      # → project → Settings → Tokens → create a project token) and the
+      # exact service name below to match your Railway service.
+      - name: Trigger Railway redeploy
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: npx -y @railway/cli@latest redeploy --service starmap --yes
+        continue-on-error: true
+
+      # Every push publishes a new :<sha> tag that never gets deleted on its
+      # own — harmless at first, but it quietly accumulates in GHCR forever.
+      # Keep the most recent 15 untagged/sha-tagged versions and let the
+      # rest go; :latest and :production are excluded by name so they're
+      # never at risk of deletion here.
+      #
+      # NOTE: package deletion sometimes needs a personal access token with
+      # delete:packages scope rather than the default GITHUB_TOKEN, depending
+      # on org/repo package permission settings. If this step fails with a
+      # 403, create a PAT, add it as a GHCR_CLEANUP_TOKEN secret, and swap
+      # secrets.GITHUB_TOKEN below for secrets.GHCR_CLEANUP_TOKEN.
+      - name: Clean up old image versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: starmap
+          package-type: container
+          min-versions-to-keep: 15
+          ignore-versions: '^(latest|production)$'
+        continue-on-error: true

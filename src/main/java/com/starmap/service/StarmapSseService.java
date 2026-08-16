@@ -14,7 +14,9 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Unified SSE broadcaster for STARMAP.
@@ -43,6 +45,14 @@ public class StarmapSseService {
 
     private final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
 
+    // Unbounded SSE connections were flagged as a real risk on a public
+    // endpoint — cap both per-client and total concurrent streams rather
+    // than letting a single client (or a script) hold the server open
+    // indefinitely with no limit.
+    private static final int MAX_CONNECTIONS_PER_IP = 5;
+    private static final int MAX_TOTAL_CONNECTIONS   = 200;
+    private final Map<String, AtomicInteger> connectionsByIp = new ConcurrentHashMap<>();
+
     public StarmapSseService(GpsService gps, SatelliteTrackingService sat,
                              EphemerisService eph, ObserverService obs,
                              ConstellationService constellation,
@@ -55,13 +65,34 @@ public class StarmapSseService {
         this.mapper                = mapper;
     }
 
-    public SseEmitter register() {
+    /** Registers a new SSE client, identified by IP for rate limiting.
+     *  Returns null if the caller has hit its per-IP cap or the server has
+     *  hit its global connection cap — the controller turns that into a
+     *  429 response rather than silently accepting an unbounded stream. */
+    public SseEmitter register(String clientIp) {
+        if (emitters.size() >= MAX_TOTAL_CONNECTIONS) {
+            log.warn("SSE registration rejected — global connection cap ({}) reached", MAX_TOTAL_CONNECTIONS);
+            return null;
+        }
+        AtomicInteger perIp = connectionsByIp.computeIfAbsent(clientIp, k -> new AtomicInteger(0));
+        if (perIp.incrementAndGet() > MAX_CONNECTIONS_PER_IP) {
+            perIp.decrementAndGet();
+            log.warn("SSE registration rejected for {} — per-IP cap ({}) reached", clientIp, MAX_CONNECTIONS_PER_IP);
+            return null;
+        }
+
         SseEmitter emitter = new SseEmitter(0L);
         emitters.add(emitter);
-        emitter.onCompletion(() -> emitters.remove(emitter));
-        emitter.onTimeout(()    -> emitters.remove(emitter));
-        emitter.onError(e    -> emitters.remove(emitter));
-        log.debug("SSE client connected — {} total", emitters.size());
+        Runnable release = () -> {
+            emitters.remove(emitter);
+            AtomicInteger count = connectionsByIp.get(clientIp);
+            if (count != null && count.decrementAndGet() <= 0) connectionsByIp.remove(clientIp, count);
+        };
+        emitter.onCompletion(release::run);
+        emitter.onTimeout(release::run);
+        emitter.onError(e -> release.run());
+        log.debug("SSE client connected ({}) — {} total, {} from this IP",
+                   clientIp, emitters.size(), perIp.get());
         return emitter;
     }
 

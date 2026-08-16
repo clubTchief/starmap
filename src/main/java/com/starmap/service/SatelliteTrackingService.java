@@ -180,32 +180,53 @@ public class SatelliteTrackingService {
     public void fetchOmm(TrackedSat ts) {
         Path cacheFile = Paths.get(cacheDir, ts.noradId + ".json");
 
-        // Try live fetch
-        try {
-            log.info("Fetching OMM (JSON) for NORAD {} from CelesTrak...", ts.noradId);
-            String json = httpGet(CELESTRAK_OMM_JSON + ts.noradId);
-            parseOmmJson(ts, json);
-            ts.ommJson = json;
-            Files.writeString(cacheFile, json);
-            ts.ommFetchedAt = Instant.now();
-            log.info("NORAD {}: {} — OMM loaded (epoch {})", ts.noradId, ts.name,
-                     ts.tle != null ? ts.tle.getDate() : "?");
-        } catch (Exception e) {
-            log.warn("NORAD {}: live fetch failed ({}), trying cache", ts.noradId, e.getMessage());
+        // Retry the live fetch with exponential backoff (2s / 4s / 8s) before
+        // giving up and falling back to cache — smooths over the transient
+        // network timeouts CelesTrak occasionally hits, without needing a
+        // person to notice and trigger a manual redeploy.
+        final int    maxAttempts  = 3;
+        final long   baseDelayMs  = 2000L;
+        Exception    lastFailure  = null;
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                if (Files.exists(cacheFile)) {
-                    String cached = Files.readString(cacheFile);
-                    parseOmmJson(ts, cached);
-                    ts.ommJson = cached;
-                    ts.ommFetchedAt = Instant.ofEpochMilli(
-                        Files.getLastModifiedTime(cacheFile).toMillis());
-                    log.info("NORAD {}: loaded from cache ({})", ts.noradId, ts.ommFetchedAt);
-                } else {
-                    log.error("NORAD {}: no cache — satellite will not be tracked", ts.noradId);
+                log.info("Fetching OMM (JSON) for NORAD {} from CelesTrak... (attempt {}/{})",
+                         ts.noradId, attempt, maxAttempts);
+                String json = httpGet(CELESTRAK_OMM_JSON + ts.noradId);
+                parseOmmJson(ts, json);
+                ts.ommJson = json;
+                Files.writeString(cacheFile, json);
+                ts.ommFetchedAt = Instant.now();
+                log.info("NORAD {}: {} — OMM loaded (epoch {})", ts.noradId, ts.name,
+                         ts.tle != null ? ts.tle.getDate() : "?");
+                return;
+            } catch (Exception e) {
+                lastFailure = e;
+                if (attempt < maxAttempts) {
+                    long delay = baseDelayMs * (1L << (attempt - 1)); // 2s, 4s, 8s
+                    log.warn("NORAD {}: fetch attempt {}/{} failed ({}), retrying in {} ms",
+                             ts.noradId, attempt, maxAttempts, e.getMessage(), delay);
+                    try { Thread.sleep(delay); }
+                    catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; }
                 }
-            } catch (Exception ce) {
-                log.error("NORAD {}: cache load failed: {}", ts.noradId, ce.getMessage());
             }
+        }
+
+        log.warn("NORAD {}: live fetch failed after {} attempts ({}), trying cache",
+                  ts.noradId, maxAttempts, lastFailure != null ? lastFailure.getMessage() : "?");
+        try {
+            if (Files.exists(cacheFile)) {
+                String cached = Files.readString(cacheFile);
+                parseOmmJson(ts, cached);
+                ts.ommJson = cached;
+                ts.ommFetchedAt = Instant.ofEpochMilli(
+                    Files.getLastModifiedTime(cacheFile).toMillis());
+                log.info("NORAD {}: loaded from cache ({})", ts.noradId, ts.ommFetchedAt);
+            } else {
+                log.error("NORAD {}: no cache — satellite will not be tracked", ts.noradId);
+            }
+        } catch (Exception ce) {
+            log.error("NORAD {}: cache load failed: {}", ts.noradId, ce.getMessage());
         }
     }
 
@@ -399,6 +420,8 @@ public class SatelliteTrackingService {
 
             s.epoch   = toIso(now);
             s.ommAge  = ts.ommFetchedAt != null ? formatAge(ts.ommFetchedAt) : "unknown";
+            s.ommStale = ts.ommFetchedAt == null
+                || Instant.now().toEpochMilli() - ts.ommFetchedAt.toEpochMilli() > 2 * MIN_FETCH_INTERVAL_MS;
             s.ommJson = ts.ommJson;
 
             s.groundTrack = buildGroundTrack(prop, now, earth, earthFrame);

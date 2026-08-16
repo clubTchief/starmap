@@ -2,6 +2,8 @@ package com.starmap.controller;
 
 import com.starmap.service.*;
 import com.starmap.model.ObserverState;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -29,19 +31,38 @@ public class StarmapController {
     private final EphemerisService         ephemerisService;
     private final GpsService               gpsService;
     private final SatelliteTrackingService satService;
+    private final ConstellationService     constellationService;
 
     public StarmapController(StarmapSseService sse, ObserverService obs,
                              EphemerisService eph, GpsService gps,
-                             SatelliteTrackingService sat) {
+                             SatelliteTrackingService sat, ConstellationService constellation) {
         this.sseService       = sse;
         this.observerService  = obs;
         this.ephemerisService = eph;
         this.gpsService       = gps;
         this.satService       = sat;
+        this.constellationService = constellation;
     }
 
     @GetMapping(path = "/stream", produces = "text/event-stream")
-    public SseEmitter stream() { return sseService.register(); }
+    public SseEmitter stream(HttpServletRequest request) {
+        String clientIp = clientIp(request);
+        SseEmitter emitter = sseService.register(clientIp);
+        if (emitter == null) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                HttpStatus.TOO_MANY_REQUESTS,
+                "Too many concurrent connections — please close other STARMAP tabs and retry.");
+        }
+        return emitter;
+    }
+
+    /** Honors X-Forwarded-For when present (Railway sits behind a proxy),
+     *  falling back to the direct remote address otherwise. */
+    private String clientIp(HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) return forwarded.split(",")[0].trim();
+        return request.getRemoteAddr();
+    }
 
     @GetMapping("/status")
     public Map<String,Object> status() {
@@ -49,7 +70,9 @@ public class StarmapController {
             "gpsSimulating", gpsService.isSimulating(),
             "ephemerisReady", ephemerisService.isReady(),
             "trackedSats",    satService.trackedNoradIds(),
-            "observer",       observerService.get()
+            "observer",       observerService.get(),
+            "constellationCounts", constellationService.getCountByConstellation(),
+            "staleConstellations", constellationService.getStaleConstellations()
         );
     }
 

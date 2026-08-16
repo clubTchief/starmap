@@ -29,6 +29,12 @@ public class SatelliteState {
     /** Human-readable OMM data age e.g. "1.3 h ago" */
     public String ommAge;
 
+    /** True once OMM data is more than 2× CelesTrak's minimum refresh interval old
+     *  (i.e. live fetches have been failing for a while) — lets the frontend show
+     *  a "tracking degraded" indicator instead of silently presenting stale data
+     *  as current. */
+    public boolean ommStale;
+
     /** Raw OMM JSON from CelesTrak (for display in the panel) */
     public String ommJson;
 

@@ -52,6 +52,7 @@ public class ConstellationService {
 
     // constellation char → list of propagators
     private final Map<String, List<SatPropagator>> propagators = new ConcurrentHashMap<>();
+    private final Map<String, Long> lastSuccessMs = new ConcurrentHashMap<>();
     private final ObjectMapper mapper = new ObjectMapper();
     private final HttpClient http = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(15))
@@ -78,17 +79,44 @@ public class ConstellationService {
             String constellation = entry.getKey();
             String url = entry.getValue();
             try {
-                List<SatPropagator> sats = fetchConstellation(constellation, url);
+                List<SatPropagator> sats = fetchConstellationWithRetry(constellation, url);
                 propagators.put(constellation, sats);
+                lastSuccessMs.put(constellation, System.currentTimeMillis());
                 total += sats.size();
                 log.info("  {} ({}): {} satellites", constellation, url.contains("GROUP=") ?
                     url.substring(url.indexOf("GROUP=") + 6) : "?", sats.size());
             } catch (Exception e) {
-                log.warn("Failed to fetch constellation {}: {}", constellation, e.getMessage());
+                log.warn("Failed to fetch constellation {} after retries: {} — keeping last known set",
+                          constellation, e.getMessage());
             }
         }
         lastRefresh = System.currentTimeMillis();
         log.info("Constellation refresh complete — {} total satellites", total);
+    }
+
+    /** Retries a constellation fetch up to 3 times with exponential backoff
+     *  (2s / 4s / 8s) before giving up. On failure, the caller keeps whatever
+     *  was fetched last time rather than clearing the constellation to empty. */
+    private List<SatPropagator> fetchConstellationWithRetry(String constellation, String url) throws Exception {
+        final int  maxAttempts = 3;
+        final long baseDelayMs = 2000L;
+        Exception  lastFailure = null;
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                return fetchConstellation(constellation, url);
+            } catch (Exception e) {
+                lastFailure = e;
+                if (attempt < maxAttempts) {
+                    long delay = baseDelayMs * (1L << (attempt - 1));
+                    log.warn("Constellation {} attempt {}/{} failed ({}), retrying in {} ms",
+                             constellation, attempt, maxAttempts, e.getMessage(), delay);
+                    try { Thread.sleep(delay); }
+                    catch (InterruptedException ie) { Thread.currentThread().interrupt(); throw e; }
+                }
+            }
+        }
+        throw lastFailure;
     }
 
     private List<SatPropagator> fetchConstellation(String constellation, String url) throws Exception {
@@ -220,5 +248,19 @@ public class ConstellationService {
         Map<String, Integer> counts = new LinkedHashMap<>();
         propagators.forEach((k, v) -> counts.put(k, v.size()));
         return counts;
+    }
+
+    /** Constellations whose data hasn't been successfully refreshed in over
+     *  2x the normal refresh interval — i.e. live fetches have been failing
+     *  for a while and the app is serving stale elements. Surfaced via
+     *  /api/status for monitoring rather than only appearing in server logs. */
+    public List<String> getStaleConstellations() {
+        long now = System.currentTimeMillis();
+        List<String> stale = new ArrayList<>();
+        for (String key : GROUPS.keySet()) {
+            Long last = lastSuccessMs.get(key);
+            if (last == null || now - last > 2 * REFRESH_MS) stale.add(key);
+        }
+        return stale;
     }
 }

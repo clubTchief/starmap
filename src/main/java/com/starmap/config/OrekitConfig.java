@@ -46,17 +46,6 @@ public class OrekitConfig {
             return;
         }
 
-        // TEMP DIAGNOSTIC — remove once the tai-utc.dat / UTC-TAI.history
-        // mystery is resolved. Logs exactly what's really on disk at
-        // container runtime, so we can tell a stale Railway Volume apart
-        // from a stale Docker image.
-        File[] listing = dataDir.listFiles();
-        if (listing != null) {
-            for (File f : listing) {
-                log.info("orekit-data entry: {} ({} bytes)", f.getName(), f.length());
-            }
-        }
-
         DataProvidersManager manager = DataContext.getDefault().getDataProvidersManager();
         manager.addProvider(new DirectoryCrawler(dataDir));
         log.info("Orekit data loaded from: {}", dataDir.getAbsolutePath());

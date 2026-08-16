@@ -26,6 +26,21 @@
       <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
 
+    <!-- Actuator — /actuator/health and /actuator/metrics for real
+         observability (SSE connection count, JVM memory, request latency)
+         instead of only finding out something's wrong from Railway logs
+         after the fact. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+
     <!-- Serial port for Hiwonder GPS module -->
     <dependency>
       <groupId>com.fazecast</groupId>
