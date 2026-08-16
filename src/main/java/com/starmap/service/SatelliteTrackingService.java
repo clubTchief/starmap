@@ -175,6 +175,24 @@ public class SatelliteTrackingService {
         });
     }
 
+    /** Catches the case refreshAll()'s 2-hour cadence otherwise misses: a
+     *  satellite that has NEVER successfully fetched (e.g. a transient
+     *  network blip right at container startup, with no cache to fall back
+     *  on) would previously sit untracked for up to 2 hours before the next
+     *  scheduled attempt. This runs far more often but only ever touches
+     *  satellites that are still in that "never succeeded" state — a
+     *  satellite with any successful fetch (however old) is left entirely
+     *  to the normal 2-hour cadence above. */
+    @Scheduled(fixedDelay = 600_000) // check every 10 min
+    public void retryNeverFetched() {
+        satellites.values().stream()
+            .filter(ts -> ts.ommFetchedAt == null)
+            .forEach(ts -> {
+                log.info("NORAD {}: retrying — has never successfully fetched OMM data", ts.noradId);
+                fetchOmm(ts);
+            });
+    }
+
     // ── OMM fetch + cache ─────────────────────────────────────────────────────
 
     public void fetchOmm(TrackedSat ts) {

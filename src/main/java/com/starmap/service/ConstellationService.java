@@ -67,7 +67,7 @@ public class ConstellationService {
         refreshAll();
     }
 
-    @Scheduled(fixedDelay = 600_000) // check every 10 min, refresh if >2hr old
+    @Scheduled(fixedDelay = 600_000) // check every 10 min, refresh if >2hr old (or sooner after a total failure)
     public void maybeRefresh() {
         if (System.currentTimeMillis() - lastRefresh > REFRESH_MS) refreshAll();
     }
@@ -75,6 +75,7 @@ public class ConstellationService {
     private void refreshAll() {
         log.info("Fetching GNSS constellation elements from CelesTrak...");
         int total = 0;
+        int successCount = 0;
         for (var entry : GROUPS.entrySet()) {
             String constellation = entry.getKey();
             String url = entry.getValue();
@@ -83,6 +84,7 @@ public class ConstellationService {
                 propagators.put(constellation, sats);
                 lastSuccessMs.put(constellation, System.currentTimeMillis());
                 total += sats.size();
+                successCount++;
                 log.info("  {} ({}): {} satellites", constellation, url.contains("GROUP=") ?
                     url.substring(url.indexOf("GROUP=") + 6) : "?", sats.size());
             } catch (Exception e) {
@@ -90,8 +92,23 @@ public class ConstellationService {
                           constellation, e.getMessage());
             }
         }
-        lastRefresh = System.currentTimeMillis();
-        log.info("Constellation refresh complete — {} total satellites", total);
+
+        // Only treat this refresh cycle as "done for the next 2 hours" if at
+        // least one constellation genuinely succeeded. A total failure (e.g.
+        // a transient network blip right at container startup, which is
+        // exactly what happened once in production) previously still
+        // advanced lastRefresh, silently locking the app out of retrying
+        // for up to 2 hours even though nothing had actually refreshed.
+        // Leaving lastRefresh unadvanced means the next scheduled check (up
+        // to 10 minutes later) will retry the whole batch again instead.
+        if (successCount > 0) {
+            lastRefresh = System.currentTimeMillis();
+            log.info("Constellation refresh complete — {} total satellites ({}/{} constellations succeeded)",
+                      total, successCount, GROUPS.size());
+        } else {
+            log.warn("Constellation refresh: all {} constellations failed — will retry within 10 minutes " +
+                      "rather than waiting the full refresh interval", GROUPS.size());
+        }
     }
 
     /** Retries a constellation fetch up to 3 times with exponential backoff
