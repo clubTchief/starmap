@@ -35,6 +35,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
 
 /**
  * Tracks one or more satellites by NORAD ID using Orekit SGP4/SDP4 propagation.
@@ -100,12 +101,12 @@ public class SatelliteTrackingService {
 
     private static class TrackedSat {
         final int    noradId;
-        String       name;
+        volatile String       name;
         final String colour;
-        TLE          tle;
-        Instant      ommFetchedAt;
-        String       ommJson;        // raw JSON from CelesTrak for display in panel
-        SatelliteState lastState;
+        volatile TLE          tle;
+        volatile Instant      ommFetchedAt;
+        volatile String       ommJson;        // raw JSON from CelesTrak for display in panel
+        volatile SatelliteState lastState;
 
         TrackedSat(int noradId, String colour) {
             this.noradId = noradId;
@@ -166,13 +167,35 @@ public class SatelliteTrackingService {
 
     @Scheduled(fixedRateString = "${sat.track.refresh-ms:7200000}")
     public void refreshAll() {
-        satellites.values().forEach(ts -> {
-            long age = ts.ommFetchedAt == null ? Long.MAX_VALUE
-                     : Instant.now().toEpochMilli() - ts.ommFetchedAt.toEpochMilli();
-            if (age >= MIN_FETCH_INTERVAL_MS) fetchOmm(ts);
-            else log.debug("NORAD {}: OMM still fresh ({} min old), skipping fetch",
-                    ts.noradId, age / 60000);
-        });
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            satellites.values().forEach(ts -> executor.submit(() -> {
+                long age = ts.ommFetchedAt == null ? Long.MAX_VALUE
+                         : Instant.now().toEpochMilli() - ts.ommFetchedAt.toEpochMilli();
+                if (age >= MIN_FETCH_INTERVAL_MS) fetchOmm(ts);
+                else log.debug("NORAD {}: OMM still fresh ({} min old), skipping fetch",
+                        ts.noradId, age / 60000);
+            }));
+        }
+    }
+
+    /** Catches the case refreshAll()'s 2-hour cadence otherwise misses: a
+     *  satellite that has NEVER successfully fetched (e.g. a transient
+     *  network blip right at container startup, with no cache to fall back
+     *  on) would previously sit untracked for up to 2 hours before the next
+     *  scheduled attempt. This runs far more often but only ever touches
+     *  satellites that are still in that "never succeeded" state — a
+     *  satellite with any successful fetch (however old) is left entirely
+     *  to the normal 2-hour cadence above. */
+    @Scheduled(fixedDelay = 600_000) // check every 10 min
+    public void retryNeverFetched() {
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            satellites.values().stream()
+                .filter(ts -> ts.ommFetchedAt == null)
+                .forEach(ts -> executor.submit(() -> {
+                    log.info("NORAD {}: retrying — has never successfully fetched OMM data", ts.noradId);
+                    fetchOmm(ts);
+                }));
+        }
     }
 
     // ── OMM fetch + cache ─────────────────────────────────────────────────────
