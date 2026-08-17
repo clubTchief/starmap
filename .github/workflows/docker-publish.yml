@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Log in to Docker Hub (avoids anonymous pull rate limits)
         if: ${{ vars.DOCKERHUB_USERNAME != '' }}
@@ -55,7 +55,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # Docker/GHCR tags must be lowercase, but the repo is clubTchief/starmap
       # (capital T), so github.repository can't be used as-is.
