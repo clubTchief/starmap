@@ -1,7 +1,7 @@
 package com.starmap.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 import com.starmap.model.Satellite;
 import jakarta.annotation.PostConstruct;
 import org.orekit.propagation.analytical.tle.TLE;
@@ -53,7 +53,7 @@ public class ConstellationService {
     // constellation char → list of propagators
     private final Map<String, List<SatPropagator>> propagators = new ConcurrentHashMap<>();
     private final Map<String, Long> lastSuccessMs = new ConcurrentHashMap<>();
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final JsonMapper mapper = JsonMapper.builder().build();
     private final HttpClient http = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(15))
         .build();

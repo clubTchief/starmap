@@ -82,7 +82,7 @@ RUN test -f ./orekit-data/DE-440-ephemerides/lnxp1990.440 \
     || (echo "DE-440-ephemerides/lnxp1990.440 is missing or undersized" && exit 1)
 
 # ── Stage 2: Build + test ────────────────────────────────────────────────────
-FROM maven:3.9-eclipse-temurin-17-alpine AS builder
+FROM maven:3.9-eclipse-temurin-21-alpine AS builder
 
 WORKDIR /build
 COPY pom.xml .
@@ -98,7 +98,7 @@ COPY --from=orekit-prep /prep/orekit-data ./orekit-data
 RUN mvn package -q
 
 # ── Stage 3: Runtime ──────────────────────────────────────────────────────────
-FROM eclipse-temurin:17-jre-alpine
+FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 RUN apk add --no-cache wget
