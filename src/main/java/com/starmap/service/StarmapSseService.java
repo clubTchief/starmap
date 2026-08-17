@@ -1,6 +1,6 @@
 package com.starmap.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.starmap.model.*;
 import com.starmap.service.ConstellationService;
 import org.orekit.time.AbsoluteDate;
@@ -41,7 +41,7 @@ public class StarmapSseService {
     private final EphemerisService         ephemerisService;
     private final ObserverService          observerService;
     private final ConstellationService     constellationService;
-    private final ObjectMapper             mapper;
+    private final JsonMapper               mapper;
 
     private final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
 
@@ -56,7 +56,7 @@ public class StarmapSseService {
     public StarmapSseService(GpsService gps, SatelliteTrackingService sat,
                              EphemerisService eph, ObserverService obs,
                              ConstellationService constellation,
-                             ObjectMapper mapper) {
+                             JsonMapper mapper) {
         this.gpsService            = gps;
         this.satService            = sat;
         this.ephemerisService      = eph;
