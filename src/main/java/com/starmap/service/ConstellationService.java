@@ -22,7 +22,10 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 /**
  * Fetches real orbital elements for all GNSS constellations from CelesTrak
@@ -74,22 +77,47 @@ public class ConstellationService {
 
     private void refreshAll() {
         log.info("Fetching GNSS constellation elements from CelesTrak...");
+
+        record Result(String constellation, String url, List<SatPropagator> sats, Exception error) {}
+
+        List<Callable<Result>> tasks = GROUPS.entrySet().stream()
+            .<Callable<Result>>map(entry -> () -> {
+                String constellation = entry.getKey();
+                String url = entry.getValue();
+                try {
+                    return new Result(constellation, url, fetchConstellationWithRetry(constellation, url), null);
+                } catch (Exception e) {
+                    return new Result(constellation, url, null, e);
+                }
+            })
+            .toList();
+
         int total = 0;
         int successCount = 0;
-        for (var entry : GROUPS.entrySet()) {
-            String constellation = entry.getKey();
-            String url = entry.getValue();
-            try {
-                List<SatPropagator> sats = fetchConstellationWithRetry(constellation, url);
-                propagators.put(constellation, sats);
-                lastSuccessMs.put(constellation, System.currentTimeMillis());
-                total += sats.size();
+        List<Future<Result>> futures;
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            futures = executor.invokeAll(tasks);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            log.warn("Constellation refresh interrupted before completion");
+            return;
+        }
+
+        // All futures are guaranteed complete by the time invokeAll() returns
+        // (no timeout was given), so resultNow() is safe here and avoids
+        // checked-exception boilerplate for a future that can't still be running.
+        for (Future<Result> f : futures) {
+            Result r = f.resultNow();
+            if (r.error() == null) {
+                propagators.put(r.constellation(), r.sats());
+                lastSuccessMs.put(r.constellation(), System.currentTimeMillis());
+                total += r.sats().size();
                 successCount++;
-                log.info("  {} ({}): {} satellites", constellation, url.contains("GROUP=") ?
-                    url.substring(url.indexOf("GROUP=") + 6) : "?", sats.size());
-            } catch (Exception e) {
+                log.info("  {} ({}): {} satellites", r.constellation(), r.url().contains("GROUP=") ?
+                    r.url().substring(r.url().indexOf("GROUP=") + 6) : "?", r.sats().size());
+            } else {
                 log.warn("Failed to fetch constellation {} after retries: {} — keeping last known set",
-                          constellation, e.getMessage());
+                          r.constellation(), r.error().getMessage());
             }
         }
 
@@ -143,12 +171,21 @@ public class ConstellationService {
             .timeout(Duration.ofSeconds(30))
             .build();
         var resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+
+        // DIAGNOSTIC (temporary): the 4.1.0 migration left every constellation
+        // returning 0 satellites with no visible error (the per-satellite
+        // failure below was only ever logged at trace level). This makes the
+        // actual failure point visible without guessing: HTTP status, raw
+        // response shape, and — critically — the FIRST real exception with a
+        // full stack trace, since e.getMessage() alone is often null/unhelpful
+        // for the exceptions Orekit and Jackson throw.
         log.info("{}: HTTP {} — {} bytes — body starts: {}",
-                constellation, resp.statusCode(), resp.body().length(),
-                resp.body().substring(0, Math.min(120, resp.body().length())));
+                 constellation, resp.statusCode(), resp.body().length(),
+                 resp.body().substring(0, Math.min(120, resp.body().length())));
+
         JsonNode root = mapper.readTree(resp.body());
         log.info("{}: parsed JSON — isArray={} size={}",
-                constellation, root.isArray(), root.size());
+                 constellation, root.isArray(), root.size());
 
         List<SatPropagator> result = new ArrayList<>();
         int prn = 1;
