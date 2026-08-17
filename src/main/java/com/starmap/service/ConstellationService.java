@@ -143,10 +143,16 @@ public class ConstellationService {
             .timeout(Duration.ofSeconds(30))
             .build();
         var resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+        log.info("{}: HTTP {} — {} bytes — body starts: {}",
+                constellation, resp.statusCode(), resp.body().length(),
+                resp.body().substring(0, Math.min(120, resp.body().length())));
         JsonNode root = mapper.readTree(resp.body());
+        log.info("{}: parsed JSON — isArray={} size={}",
+                constellation, root.isArray(), root.size());
 
         List<SatPropagator> result = new ArrayList<>();
         int prn = 1;
+        boolean loggedFirstFailure = false;
         for (JsonNode node : root) {
             try {
                 TLE tle = ommNodeToTle(node);
@@ -155,7 +161,11 @@ public class ConstellationService {
                 String prnStr = constellation + String.format("%02d", prn++);
                 result.add(new SatPropagator(prnStr, name, constellation, prop));
             } catch (Exception e) {
-                log.trace("Skip satellite in {}: {}", constellation, e.getMessage());
+                if (!loggedFirstFailure) {
+                    log.warn("{}: first satellite parse failure (further ones suppressed) — node: {}",
+                             constellation, node.toString(), e);
+                    loggedFirstFailure = true;
+                }
             }
         }
         return result;
@@ -166,7 +176,6 @@ public class ConstellationService {
         int    noradId    = n.path("NORAD_CAT_ID").asInt();
         char   classification = 'U';
         String intlDesig  = n.path("OBJECT_ID").asText("00000A");
-        double epochMjd   = n.path("EPOCH").asDouble();
         double meanMotion = n.path("MEAN_MOTION").asDouble()
                             * (2 * Math.PI / 86400.0);      // rev/day → rad/s
         double ecc        = n.path("ECCENTRICITY").asDouble();
