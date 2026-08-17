@@ -30,7 +30,7 @@ jobs:
 
       - name: Log in to Docker Hub (avoids anonymous pull rate limits)
         if: ${{ vars.DOCKERHUB_USERNAME != '' }}
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -63,7 +63,7 @@ jobs:
         run: echo "IMAGE_NAME=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -81,7 +81,7 @@ jobs:
       # rather than failing the whole pipeline.
       - name: Log in to Docker Hub (avoids anonymous pull rate limits)
         if: ${{ vars.DOCKERHUB_USERNAME != '' }}
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
