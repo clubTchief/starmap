@@ -52,6 +52,15 @@
       <version>2.11.4</version>
     </dependency>
 
+    <!-- CSV parsing for the HYG star catalogue (119k rows, some quoted
+         fields) — deliberately not hand-rolled given the row count and
+         the cost of a subtle parsing bug going unnoticed. -->
+    <dependency>
+      <groupId>com.opencsv</groupId>
+      <artifactId>opencsv</artifactId>
+      <version>5.9</version>
+    </dependency>
+
     <!-- Orekit — orbit propagation, frame transforms, DE430 ephemeris -->
     <dependency>
       <groupId>org.orekit</groupId>
