@@ -15,6 +15,7 @@ import java.util.Map;
  *
  * GET  /api/stream           → SSE "starmap" events at 1 Hz
  * GET  /api/status           → app health and readiness
+ * GET  /api/stars            → static naked-eye star catalogue (once, not SSE)
  * GET  /api/observer         → current observer position
  * PUT  /api/observer         → manually set observer position
  * POST /api/observer/geo     → set from browser geolocation
@@ -32,16 +33,35 @@ public class StarmapController {
     private final GpsService               gpsService;
     private final SatelliteTrackingService satService;
     private final ConstellationService     constellationService;
+    private final StarCatalogueService     starCatalogueService;
 
     public StarmapController(StarmapSseService sse, ObserverService obs,
                              EphemerisService eph, GpsService gps,
-                             SatelliteTrackingService sat, ConstellationService constellation) {
+                             SatelliteTrackingService sat, ConstellationService constellation,
+                             StarCatalogueService starCatalogue) {
         this.sseService       = sse;
         this.observerService  = obs;
         this.ephemerisService = eph;
         this.gpsService       = gps;
         this.satService       = sat;
         this.constellationService = constellation;
+        this.starCatalogueService = starCatalogue;
+    }
+
+    /**
+     * The static naked-eye star catalogue (mag <= 6.5, ~8,900 stars) —
+     * served once per client, not over SSE. Az/El are computed by the
+     * frontend itself from frameContext.lstDeg + observer.latDeg, same
+     * pattern the existing celestial grid already uses. Deliberately a
+     * plain GET, not SSE: this payload doesn't change tick-to-tick, so
+     * re-sending it every second would cost real Railway egress ($0.05/GB)
+     * for no benefit — a browser fetches this once and caches it.
+     *
+     * Star data: HYG Database v4.1, astronexus, CC BY-SA 4.0.
+     */
+    @GetMapping("/stars")
+    public java.util.List<com.starmap.model.StarData> stars() {
+        return starCatalogueService.getCatalogue();
     }
 
     @GetMapping(path = "/stream", produces = "text/event-stream")

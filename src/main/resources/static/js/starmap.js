@@ -493,7 +493,7 @@ function initGlobe() {
     for (let el = 15; el <= 75; el += 15) {
       const pts = [];
       for (let i = 0; i <= STEPS; i++) {
-        const c = skyElAzToCart(lat, lon, el, (i / STEPS) * 360, GRID_DIST);
+        const c = skyDomeElAzToCart(lat, lon, el, (i / STEPS) * 360, GRID_DIST);
         if (c) pts.push(c);
       }
       const isHalf = (el === 45);
@@ -501,7 +501,7 @@ function initGlobe() {
 
       // Degree label at south (az=180) — same position Stellarium uses
       skyLabel(
-        skyElAzToCart(lat, lon, el, 180, GRID_DIST * 1.02),
+        skyDomeElAzToCart(lat, lon, el, 180, GRID_DIST * 1.02),
         `${el}°`,
         '9px JetBrains Mono',
         DEG_COL, 0.85
@@ -511,7 +511,7 @@ function initGlobe() {
     // ── 2. Horizon ring (el ≈ 1°) — bright, slightly thicker ──────────────
     const horizPts = [];
     for (let i = 0; i <= STEPS; i++) {
-      const c = skyElAzToCart(lat, lon, 1, (i / STEPS) * 360, GRID_DIST);
+      const c = skyDomeElAzToCart(lat, lon, 1, (i / STEPS) * 360, GRID_DIST);
       if (c) horizPts.push(c);
     }
     horizonEntity = viewer.entities.add({
@@ -527,7 +527,7 @@ function initGlobe() {
     for (let az = 0; az < 360; az += 15) {
       const pts = [];
       for (let el = 1; el <= 89; el += 2) {
-        const c = skyElAzToCart(lat, lon, el, az, GRID_DIST);
+        const c = skyDomeElAzToCart(lat, lon, el, az, GRID_DIST);
         if (c) pts.push(c);
       }
       const isCardinal = (az % 90 === 0);
@@ -553,7 +553,7 @@ function initGlobe() {
     ];
     LABELS.forEach(({az, label, bold}) => {
       // Place label just below the horizon ring
-      const cart = skyElAzToCart(lat, lon, -1.5, az, GRID_DIST * 1.03);
+      const cart = skyDomeElAzToCart(lat, lon, -1.5, az, GRID_DIST * 1.03);
       if (!cart) return;
       skyLabel(
         cart, label,
@@ -563,7 +563,7 @@ function initGlobe() {
     });
 
     // ── 5. Zenith marker ──────────────────────────────────────────────────
-    const zenCart = skyElAzToCart(lat, lon, 89.8, 0, GRID_DIST);
+    const zenCart = skyDomeElAzToCart(lat, lon, 89.8, 0, GRID_DIST);
     if (zenCart) {
       viewer.entities.add({
         _isSkyViewLabel: true,
@@ -577,7 +577,7 @@ function initGlobe() {
         }
       });
       skyLabel(
-        skyElAzToCart(lat, lon, 88, 0, GRID_DIST),
+        skyDomeElAzToCart(lat, lon, 88, 0, GRID_DIST),
         'Z', 'bold 10px JetBrains Mono', CARD_COL, 0.9
       );
     }
@@ -2263,7 +2263,7 @@ let skyViewEntities  = [];
 
 // Convert observer-relative elevation/azimuth to an ECEF Cartesian3 at a
 // given distance — same topocentric math used in GNSS Tracker.
-function skyElAzToCart(latDeg, lonDeg, elevDeg, azimDeg, distM) {
+function skyDomeElAzToCart(latDeg, lonDeg, elevDeg, azimDeg, distM) {
   const D2R = Math.PI / 180;
   const elR = elevDeg * D2R, azR = azimDeg * D2R;
   const e = Math.cos(elR) * Math.sin(azR);
@@ -2345,6 +2345,7 @@ function exitSkyView() {
 
   skyViewEntities.forEach(e => viewer.entities.remove(e));
   skyViewEntities = [];
+  clearStarField();
 
   scene.globe.show         = activeMode <= 2;
   scene.skyAtmosphere.show = activeMode <= 2;
@@ -2359,6 +2360,155 @@ function toggleSkyView() {
   if (skyViewActive) exitSkyView();
   else enterSkyView();
 }
+
+// ── Sky View star field (HYG catalogue) ──────────────────────────────────
+// Real star positions/magnitudes/colours from HYG v4.1 (astronexus,
+// CC BY-SA 4.0 — see the ★ STARS button's tooltip for the required credit).
+// The catalogue itself (hip/proper/raRad/decRad/mag/ci) is fetched ONCE
+// from /api/stars and cached here — Az/El are computed client-side every
+// tick from frameContext.lstDeg + the observer's latitude, the same
+// pattern the existing celestial RA/Dec grid already uses (buildGrid()
+// does its own spherical math from gmstDeg rather than having the server
+// pre-project points). Doing this server-side and re-sending ~8,900 stars
+// over SSE every second was costed at roughly $80/month in Railway egress
+// per continuously-connected client — this design has zero ongoing cost
+// beyond the one-time ~500KB fetch, cached by the browser thereafter.
+let starCatalogue     = [];     // raw {hip, proper, raRad, decRad, mag, ci}
+let starsVisible      = false;
+let starCollection    = null;   // Cesium.PointPrimitiveCollection, created lazily
+let starLabelEntities = [];     // name labels, brightest ~20 stars only
+
+async function loadStarCatalogue() {
+  try {
+    const resp = await fetch('/api/stars');
+    if (!resp.ok) { console.warn('Star catalogue fetch failed:', resp.status); return; }
+    starCatalogue = await resp.json();
+    console.log(`Star catalogue loaded: ${starCatalogue.length} stars ` +
+                `(HYG v4.1, CC BY-SA 4.0, astronexus)`);
+  } catch (err) {
+    console.warn('Star catalogue fetch error:', err);
+  }
+}
+loadStarCatalogue(); // kick off once at page load, not per Sky View entry
+
+function ciToColor(ci) {
+  if (ci == null || Number.isNaN(ci)) return Cesium.Color.fromCssColorString('#FFFFFF');
+  if (ci < -0.3) return Cesium.Color.fromCssColorString('#CAE8FF'); // blue-white O/B
+  if (ci <  0.0) return Cesium.Color.fromCssColorString('#DDEEFF'); // white A
+  if (ci <  0.3) return Cesium.Color.fromCssColorString('#FFFEF0'); // yellow-white F
+  if (ci <  0.6) return Cesium.Color.fromCssColorString('#FFFF80'); // yellow G (Sun-like)
+  if (ci <  1.0) return Cesium.Color.fromCssColorString('#FFCC44'); // orange K
+  return Cesium.Color.fromCssColorString('#FF8844');                 // red M
+}
+
+function magToPixelSize(mag) {
+  return Math.max(1, 6 - mag); // mag 1 -> 5px, mag 6 -> 1px
+}
+
+function ensureStarCollection() {
+  if (!starCollection) {
+    starCollection = new Cesium.PointPrimitiveCollection();
+    viewer.scene.primitives.add(starCollection);
+  }
+  return starCollection;
+}
+
+/** Updates star point positions for the current LST/observer. Safe to call
+ *  every tick (unlike buildGrid()'s Entity-based polylines, which are
+ *  deliberately NOT rebuilt per-tick because recreating ~360+ full Entity
+ *  objects every second would be expensive) — PointPrimitiveCollection
+ *  just updates a typed array under the hood, so per-tick repositioning
+ *  of ~8,900 points is cheap. Every star gets exactly one point added on
+ *  the first call (even ones currently below the horizon, just hidden via
+ *  `show: false`) so each star's index in starCatalogue always matches
+ *  its point's index in the collection on every later call — skipping
+ *  below-horizon stars on the first pass would misalign every star after
+ *  the first gap. */
+function renderStarField(snap) {
+  if (!starsVisible || !skyViewActive || !starCatalogue.length) return;
+  if (!snap?.frameContext) return;
+
+  const obs    = window._latestObserver;
+  const lstDeg = snap.frameContext.lstDeg;
+  const latDeg = obs?.latDeg, lonDeg = obs?.lonDeg;
+  if (latDeg == null || lonDeg == null || lstDeg == null) return;
+
+  const collection = ensureStarCollection();
+  const needsInit = collection.length !== starCatalogue.length;
+  if (needsInit) {
+    collection.removeAll();
+    starLabelEntities.forEach(e => viewer.entities.remove(e));
+    starLabelEntities = [];
+  }
+
+  const latRad = Cesium.Math.toRadians(latDeg);
+  const lstRad = Cesium.Math.toRadians(lstDeg);
+  const sinLat = Math.sin(latRad), cosLat = Math.cos(latRad);
+
+  for (let i = 0; i < starCatalogue.length; i++) {
+    const s = starCatalogue[i];
+    const H = lstRad - s.raRad;
+    const sinDec = Math.sin(s.decRad), cosDec = Math.cos(s.decRad);
+    const cosH = Math.cos(H);
+
+    let sinAlt = sinDec * sinLat + cosDec * cosLat * cosH;
+    sinAlt = Math.max(-1, Math.min(1, sinAlt));
+    const elDeg = Cesium.Math.toDegrees(Math.asin(sinAlt));
+    const visible = elDeg >= -5;
+
+    let cart = null;
+    if (visible) {
+      const y = -cosDec * Math.sin(H);
+      const x = sinDec * cosLat - cosDec * cosLat * cosH;
+      const azDeg = (Cesium.Math.toDegrees(Math.atan2(y, x)) + 360) % 360;
+      cart = skyDomeElAzToCart(latDeg, lonDeg, elDeg, azDeg, 100_000);
+    }
+
+    if (needsInit) {
+      collection.add({
+        position: cart || Cesium.Cartesian3.ZERO,
+        color: ciToColor(s.ci),
+        pixelSize: magToPixelSize(s.mag),
+        show: !!cart,
+        // Stars are conceptually at infinite distance — this keeps them
+        // from ever depth-occluding (or being occluded by) the Sun/Moon/
+        // planets, which in Sky View are placed at their real, much
+        // closer scaled 3D positions (bodyToCart), not on this dome.
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      });
+      if (cart && s.mag < 2.0 && s.proper) {
+        starLabelEntities.push(viewer.entities.add({
+          position: cart,
+          label: {
+            text: s.proper,
+            font: '11px sans-serif',
+            fillColor: Cesium.Color.fromCssColorString('#DDEEFF').withAlpha(0.85),
+            pixelOffset: new Cesium.Cartesian2(8, 0),
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            showBackground: false,
+          }
+        }));
+      }
+    } else {
+      const p = collection.get(i);
+      p.show = !!cart;
+      if (cart) p.position = cart;
+    }
+  }
+}
+
+function clearStarField() {
+  if (starCollection) starCollection.show = false;
+  starLabelEntities.forEach(e => { e.show = false; });
+}
+
+document.getElementById('btn-stars')?.addEventListener('click', () => {
+  starsVisible = !starsVisible;
+  document.getElementById('btn-stars')?.classList.toggle('on', starsVisible);
+  if (starCollection) starCollection.show = starsVisible;
+  starLabelEntities.forEach(e => { e.show = starsVisible; });
+  if (starsVisible && latestStarmapSnap) renderStarField(latestStarmapSnap);
+});
 
 // ── Stellarium-style AzEl grid at the observer's location ────────────────
 function buildSkyViewGrid(latDeg, lonDeg) {
@@ -2401,24 +2551,24 @@ function buildSkyViewGrid(latDeg, lonDeg) {
   for (let el = 15; el <= 75; el += 15) {
     const pts = [];
     for (let i = 0; i <= STEPS; i++)
-      pts.push(skyElAzToCart(latDeg, lonDeg, el, (i/STEPS)*360, GRID_DIST));
+      pts.push(skyDomeElAzToCart(latDeg, lonDeg, el, (i/STEPS)*360, GRID_DIST));
     const isHalf = el === 45;
     skyLine(pts, isHalf ? 1.5 : 1.0, GRID_COL, isHalf ? 0.65 : 0.45);
-    skyLabel(skyElAzToCart(latDeg, lonDeg, el, 180, GRID_DIST*1.02),
+    skyLabel(skyDomeElAzToCart(latDeg, lonDeg, el, 180, GRID_DIST*1.02),
       `${el}°`, '9px JetBrains Mono', '#3a7fa0', 0.85);
   }
 
   // Horizon ring
   const horizPts = [];
   for (let i = 0; i <= STEPS; i++)
-    horizPts.push(skyElAzToCart(latDeg, lonDeg, 1, (i/STEPS)*360, GRID_DIST));
+    horizPts.push(skyDomeElAzToCart(latDeg, lonDeg, 1, (i/STEPS)*360, GRID_DIST));
   skyLine(horizPts, 2.0, HORIZ_COL, 0.90);
 
   // Azimuth spokes every 15°
   for (let az = 0; az < 360; az += 15) {
     const pts = [];
     for (let el = 1; el <= 89; el += 2)
-      pts.push(skyElAzToCart(latDeg, lonDeg, el, az, GRID_DIST));
+      pts.push(skyDomeElAzToCart(latDeg, lonDeg, el, az, GRID_DIST));
     const isCardinal = az % 90 === 0;
     const isInterCard = az % 45 === 0 && !isCardinal;
     skyLine(pts,
@@ -2431,12 +2581,12 @@ function buildSkyViewGrid(latDeg, lonDeg) {
   [{az:0,l:'N',b:true},{az:45,l:'NE',b:false},{az:90,l:'E',b:true},
    {az:135,l:'SE',b:false},{az:180,l:'S',b:true},{az:225,l:'SW',b:false},
    {az:270,l:'W',b:true},{az:315,l:'NW',b:false}].forEach(({az,l,b}) => {
-    skyLabel(skyElAzToCart(latDeg, lonDeg, -1.5, az, GRID_DIST*1.03),
+    skyLabel(skyDomeElAzToCart(latDeg, lonDeg, -1.5, az, GRID_DIST*1.03),
       l, b ? 'bold 12px JetBrains Mono' : '10px JetBrains Mono', HORIZ_COL, b?1.0:0.8);
   });
 
   // Zenith marker
-  const zenCart = skyElAzToCart(latDeg, lonDeg, 89.8, 0, GRID_DIST);
+  const zenCart = skyDomeElAzToCart(latDeg, lonDeg, 89.8, 0, GRID_DIST);
   skyViewEntities.push(viewer.entities.add({
     _isSkyView: true,
     position: zenCart,
@@ -2444,7 +2594,7 @@ function buildSkyViewGrid(latDeg, lonDeg) {
       outlineColor: Cesium.Color.BLACK, outlineWidth: 2,
       disableDepthTestDistance: Number.POSITIVE_INFINITY }
   }));
-  skyLabel(skyElAzToCart(latDeg, lonDeg, 88, 0, GRID_DIST), 'Z',
+  skyLabel(skyDomeElAzToCart(latDeg, lonDeg, 88, 0, GRID_DIST), 'Z',
     'bold 10px JetBrains Mono', HORIZ_COL, 0.9);
 }
 
@@ -3876,6 +4026,7 @@ function connectSSE() {
 
 function handleStarmapSnapshot(snap) {
   if (!snap) return;
+  renderStarField(snap);
 
   // GNSS layer — uses GNSS Tracker's existing handleSnapshot internals
   if (snap.position) {
