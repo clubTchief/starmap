@@ -82,7 +82,7 @@ RUN test -f ./orekit-data/DE-440-ephemerides/lnxp1990.440 \
     || (echo "DE-440-ephemerides/lnxp1990.440 is missing or undersized" && exit 1)
 
 # ── Stage 2: Build + test ────────────────────────────────────────────────────
-FROM maven:3.9-eclipse-temurin-21-alpine AS builder
+FROM maven:3.9-eclipse-temurin-25-alpine AS builder
 
 WORKDIR /build
 COPY pom.xml .
@@ -98,7 +98,7 @@ COPY --from=orekit-prep /prep/orekit-data ./orekit-data
 RUN mvn package -q
 
 # ── Stage 3: Runtime ──────────────────────────────────────────────────────────
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:25-jre-alpine
 
 WORKDIR /app
 RUN apk add --no-cache wget
@@ -120,7 +120,7 @@ ENV SERVER_PORT=8080 \
     OBSERVER_DEFAULT_LON=72.9133 \
     OBSERVER_DEFAULT_ALT=14.0 \
     SAT_TRACK_NORAD_IDS=25544 \
-    JAVA_OPTS="-Xms512m -Xmx1024m -Djava.net.preferIPv4Stack=true"
+    JAVA_OPTS="-Xms512m -Xmx1024m -Djava.net.preferIPv4Stack=true --enable-native-access=ALL-UNNAMED"
 
 EXPOSE 8080
 
