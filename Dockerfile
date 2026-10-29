@@ -82,7 +82,7 @@ RUN test -f ./orekit-data/DE-440-ephemerides/lnxp1990.440 \
     || (echo "DE-440-ephemerides/lnxp1990.440 is missing or undersized" && exit 1)
 
 # ── Stage 2: Build + test ────────────────────────────────────────────────────
-FROM maven:3.9-eclipse-temurin-21-alpine AS builder
+FROM maven:3.9-eclipse-temurin-25-alpine AS builder
 
 WORKDIR /build
 COPY pom.xml .
