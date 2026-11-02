@@ -18,6 +18,11 @@ class ConstellationServiceTest {
     private final ConstellationService svc = new ConstellationService();
 
     @Test
+    void reportsNavicAsAConfiguredConstellation() {
+        assertTrue(svc.getStaleConstellations().contains("I"));
+    }
+
+    @Test
     void satelliteDirectlyOverheadHasElevationNear90() {
         // Observer at the equator, prime meridian, sea level.
         double obsLat = 0.0, obsLon = 0.0, obsAlt = 0.0;

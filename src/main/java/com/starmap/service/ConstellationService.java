@@ -37,6 +37,7 @@ import java.util.concurrent.Future;
  *   E - Galileo (24 satellites, ~23,200 km, 56° inclination)
  *   C - BeiDou (45+ satellites, MEO/GEO/IGSO mixed)
  *   J - QZSS (4 satellites, quasi-zenith over Japan)
+ *   I - IRNSS/NavIC (regional Indian navigation system)
  */
 @Service
 public class ConstellationService {
@@ -50,7 +51,8 @@ public class ConstellationService {
         "R", "https://celestrak.org/NORAD/elements/gp.php?GROUP=glo-ops&FORMAT=json",
         "E", "https://celestrak.org/NORAD/elements/gp.php?GROUP=galileo&FORMAT=json",
         "C", "https://celestrak.org/NORAD/elements/gp.php?GROUP=beidou&FORMAT=json",
-        "J", "https://celestrak.org/NORAD/elements/gp.php?GROUP=sbas&FORMAT=json"
+        "J", "https://celestrak.org/NORAD/elements/gp.php?GROUP=sbas&FORMAT=json",
+        "I", "https://celestrak.org/NORAD/elements/gp.php?GROUP=irnss&FORMAT=json"
     );
 
     // constellation char → list of propagators

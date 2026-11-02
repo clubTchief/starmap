@@ -747,7 +747,7 @@ function updatePositionTab(pos) {
 }
 
 function updateSigGrid(sats, ggaUsed, staleConstellations) {
-  const ALL_CONS = ['G','R','E','B','Q'];
+  const ALL_CONS = ['G','R','E','B','Q','I'];
   const META = { G:'GPS', R:'GLO', E:'GAL', B:'BDS', Q:'QZSS', I:'IRNSS', S:'SBAS' };
   const stale = new Set(staleConstellations || []);
 
@@ -764,7 +764,7 @@ function updateSigGrid(sats, ggaUsed, staleConstellations) {
     if (s.used) usedCnt[p] = (usedCnt[p] || 0) + 1;
   });
 
-  // Base constellations always first, any extras (I, S…) appended
+  // Base constellations always first, any extras (S…) appended
   const extra   = Object.keys(counts).filter(p => !ALL_CONS.includes(p))
                         .sort((a,b) => (counts[b]||0) - (counts[a]||0));
   const entries = [...ALL_CONS, ...extra];
@@ -4287,4 +4287,3 @@ document.getElementById('btn-grid')?.classList.add('on');
 connectSSE();
 updateSigGrid([]);
 console.log('%cSTARMAP READY', 'color:#00e5ff;font-weight:bold;font-size:18px;letter-spacing:4px');
-
