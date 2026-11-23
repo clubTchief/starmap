@@ -28,6 +28,11 @@
     <button class="frame-btn" id="btn-fm3" onclick="switchFrameMode(3)" title="Heliocentric Equatorial">③ HELIO·EQ</button>
     <button class="frame-btn" id="btn-fm4" onclick="switchFrameMode(4)" title="Heliocentric Ecliptic">④ HELIO·ECL</button>
   </div>
+  <div id="auth-widget" hidden>
+    <span id="auth-status" role="status" aria-live="polite"></span>
+    <div id="google-signin-button"></div>
+    <button id="auth-signout" type="button" hidden>SIGN OUT</button>
+  </div>
 </div>
 
 <!-- ══ LEFT PANEL ══════════════════════════════════════════════════════════ -->
@@ -136,11 +141,6 @@
     <span id="live-badge" class="badge-offline">● CONNECTING</span>
   </div>
   <div id="topbar-right">
-    <div id="auth-widget" hidden>
-      <span id="auth-status" role="status" aria-live="polite"></span>
-      <div id="google-signin-button"></div>
-      <button id="auth-signout" type="button" hidden>SIGN OUT</button>
-    </div>
     <span id="utc-clock">--:--:-- UTC</span>
   </div>
 </div>
