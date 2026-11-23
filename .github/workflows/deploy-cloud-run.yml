@@ -1,0 +1,51 @@
+name: Deploy to Cloud Run
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-cloud-run
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  REGION: europe-west1
+  IMAGE: europe-west1-docker.pkg.dev/maps-31544/starmap/starmap
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'   # match your pom / Dockerfile
+          cache: maven
+
+      - run: mvn -B verify
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/370843682819/locations/global/workloadIdentityPools/github/providers/github-provider
+          service_account: github-deployer@maps-31544.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - run: gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
+
+      - name: Build and push
+        run: |
+          docker build -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:production" .
+          docker push --all-tags "$IMAGE"
+
+      - uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: starmap
+          region: ${{ env.REGION }}
+          image: ${{ env.IMAGE }}:${{ github.sha }}
