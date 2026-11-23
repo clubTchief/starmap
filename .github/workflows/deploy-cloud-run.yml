@@ -28,7 +28,7 @@ jobs:
           java-version: '25'   # match your pom / Dockerfile
           cache: maven
 
-      - run: ./mvnw -B verify
+      - run: mvn -B verify
 
       - uses: google-github-actions/auth@v2
         with:
