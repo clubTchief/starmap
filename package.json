@@ -1,5 +1,8 @@
 {
-  "dependencies": {
-    "puppeteer": "^25.4.0"
+  "devDependencies": {
+    "puppeteer": "^25.18.1"
+  },
+  "scripts": {
+    "test:browser": "node --test tests/browser/*.test.js"
   }
 }

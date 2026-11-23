@@ -56,8 +56,49 @@ jobs:
           docker build -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:production" .
           docker push --all-tags "$IMAGE"
 
-      - uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d # v3
+      - id: deploy
+        uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d # v3
         with:
           service: starmap
           region: ${{ env.REGION }}
           image: ${{ env.IMAGE }}:${{ github.sha }}
+
+      - name: Smoke test deployed service
+        env:
+          SERVICE_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$SERVICE_URL" ]]; then
+            echo "::error::Cloud Run deploy did not return a service URL"
+            exit 1
+          fi
+
+          curl --fail --silent --show-error --retry 6 --retry-all-errors \
+            --retry-delay 5 --max-time 30 "$SERVICE_URL/" -o /tmp/starmap-home.html
+          grep -q '<title>STARMAP' /tmp/starmap-home.html
+
+          health="$(curl --fail --silent --show-error --retry 6 --retry-all-errors \
+            --retry-delay 5 --max-time 30 "$SERVICE_URL/actuator/health")"
+          python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)
+          actual = data.get("status")
+          if actual != "UP":
+              raise SystemExit(f"Health endpoint status is {actual!r}")
+          print("Health endpoint is UP")
+          ' <<<"$health"
+
+          status="$(curl --fail --silent --show-error --retry 6 --retry-all-errors \
+            --retry-delay 5 --max-time 30 "$SERVICE_URL/api/status")"
+          python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)
+          required = {"gpsSimulating", "ephemerisReady", "trackedSats", "observer"}
+          missing = required - data.keys()
+          if missing:
+              raise SystemExit(f"Missing status fields: {sorted(missing)}")
+          if data["ephemerisReady"] is not True:
+              raise SystemExit("Ephemeris is not ready")
+          print("Application status endpoint is ready")
+          ' <<<"$status"

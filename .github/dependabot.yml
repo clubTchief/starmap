@@ -27,3 +27,17 @@ updates:
     labels:
       - "dependencies"
       - "ci"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  # Puppeteer is used by the browser smoke tests and demo recorder.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "ci"
