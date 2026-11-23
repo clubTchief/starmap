@@ -108,13 +108,9 @@ public class GpsService {
     // ── Serial port reader ────────────────────────────────────────────────────
 
     private void readSerial() {
-        // On Windows, jSerialComm is most reliable with the \\.\COMn device path.
-        // Normalize plain "COMn" → "\\.\COMn" so both forms work in config.
-        String portName = serialPort;
-        if (portName.matches("(?i)COM\\d+") && !portName.startsWith("\\\\.\\")) {
-            portName = "\\\\.\\\\" + portName;
-        }
-        final String resolvedPort = portName;
+        // Pass the system port name through unchanged; jSerialComm handles
+        // Windows device-path prefixes internally.
+        final String resolvedPort = serialPort.trim();
 
         while (running) {
             SerialPort port = null;
@@ -127,7 +123,9 @@ public class GpsService {
                 port.setComPortTimeouts(SerialPort.TIMEOUT_READ_SEMI_BLOCKING, 2000, 0);
 
                 if (!port.openPort()) {
-                    log.warn("Cannot open {}. Is GnssToolKit3 or another app using it? Retrying in 5s.", resolvedPort);
+                    log.warn("Cannot open serial port {} (jSerialComm error {}, location {}). "
+                                    + "Check that the port exists and is not in use. Retrying in 5s.",
+                            resolvedPort, port.getLastErrorCode(), port.getLastErrorLocation());
                     Thread.sleep(5000);
                     continue;
                 }
