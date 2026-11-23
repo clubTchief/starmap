@@ -2,7 +2,7 @@ name: Uptime check
 
 # Runs on GitHub's own schedule, independent of any deploy — this is the
 # thing that answers "did anyone notice the app went down" without a
-# person having to remember to look at Railway logs.
+# person having to remember to look at Cloud Run logs.
 #
 # A failed run triggers GitHub's default email notification to the repo
 # owner/watchers — no external service or webhook needed to get started.
@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Ping /actuator/health
         run: |
-          URL="https://starmap-production-fbf2.up.railway.app/actuator/health"
+          URL="https://starmap-tvyqcsjjqq-ew.a.run.app/actuator/health"
           echo "Checking $URL"
           STATUS=$(curl -s -o /tmp/health.json -w "%{http_code}" --max-time 15 "$URL" || echo "000")
           echo "HTTP status: $STATUS"
