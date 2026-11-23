@@ -21,6 +21,7 @@ STARMAP is an interactive geospatial and astrodynamics visualization app that co
 
 - Java 25
 - Maven
+- Node.js 24 for browser smoke tests
 - Internet access for CesiumJS map assets and satellite data
 
 ### Start with simulated GPS
@@ -49,6 +50,24 @@ docker compose up --build
 ```
 
 Compose enables GPS simulation, publishes port 8080, and persists the satellite cache in a named volume.
+
+### Run browser smoke tests
+
+Start STARMAP with simulated GPS, then install the Node development dependency and run the Puppeteer checks:
+
+```powershell
+$env:GPS_SIMULATE = "true"
+mvn spring-boot:run
+```
+
+In another terminal:
+
+```bash
+npm ci
+npm run test:browser
+```
+
+The browser smoke tests verify that frame, star, and satellite controls and handlers are served, then load the satellite status and star catalogue through the browser. Set `STARMAP_BASE_URL` to test another running instance.
 
 ## Configuration
 

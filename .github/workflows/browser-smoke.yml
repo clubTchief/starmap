@@ -1,0 +1,62 @@
+name: Browser smoke tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/browser-smoke.yml'
+      - '.github/workflows/deploy-cloud-run.yml'
+      - 'Dockerfile'
+      - 'pom.xml'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'src/**'
+      - 'tests/browser/**'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  browser-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install browser test dependencies
+        run: npm ci
+
+      - name: Start production container and wait for readiness
+        run: |
+          set -euo pipefail
+          docker compose up --build --detach
+
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:8080/actuator/health \
+                -o /tmp/starmap-health.json \
+              && python3 -c 'import json; import sys; sys.exit(0 if json.load(open(sys.argv[1])).get("status") == "UP" else 1)' /tmp/starmap-health.json \
+              && curl --fail --silent http://127.0.0.1:8080/api/status \
+                -o /tmp/starmap-status.json \
+              && python3 -c 'import json; import sys; data=json.load(open(sys.argv[1])); sys.exit(0 if data.get("ephemerisReady") is True and 25544 in data.get("trackedSats", []) else 1)' /tmp/starmap-status.json; then
+              echo "STARMAP is ready"
+              exit 0
+            fi
+            sleep 5
+          done
+
+          docker compose logs --no-color starmap
+          echo "::error::STARMAP did not become ready"
+          exit 1
+
+      - name: Run browser smoke tests
+        run: npm run test:browser
+
+      - name: Stop STARMAP
+        if: always()
+        run: docker compose down --remove-orphans
