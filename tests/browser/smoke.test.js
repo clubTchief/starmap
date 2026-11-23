@@ -39,6 +39,7 @@ test('serves reference-frame, star, and satellite controls', async () => {
     assert.ok(html.includes('id="btn-stars"'), 'star display control should be present');
     assert.ok(html.includes('id="sat-selector"'), 'satellite selector should be present');
     assert.ok(html.includes('value="25544"'), 'ISS should be selected by default');
+    assert.ok(html.includes('id="auth-widget"'), 'browser sign-in controls should be present');
 
     const scriptResponse = await page.goto(new URL('/js/starmap.js', appUrl), {
       waitUntil: 'domcontentloaded',
@@ -48,6 +49,20 @@ test('serves reference-frame, star, and satellite controls', async () => {
     const script = await scriptResponse.text();
     assert.ok(script.includes('function switchFrameMode(newMode)'), 'frame-switch handler should be served');
     assert.ok(script.includes("document.getElementById('btn-stars')?.addEventListener('click'"), 'star toggle handler should be served');
+    assert.ok(script.includes("headers.set('Authorization'"), 'write requests should send the signed-in bearer token');
+    assert.ok(!script.includes('X-API-Key'), 'the shared API key must never be embedded in browser code');
+  } finally {
+    await page.close();
+  }
+});
+
+test('serves public authentication configuration without exposing the email allowlist', async () => {
+  const { page, response } = await openPage('/api/auth/config');
+  try {
+    assert.equal(response.status(), 200);
+    const config = JSON.parse(await response.text());
+    assert.equal(typeof config.googleClientId, 'string');
+    assert.ok(!('allowedEmails' in config), 'authorized account emails must remain server-side');
   } finally {
     await page.close();
   }

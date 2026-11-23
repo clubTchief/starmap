@@ -89,7 +89,7 @@ RUN addgroup -S starmap && adduser -S starmap -G starmap
 RUN chown starmap:starmap /app
 
 COPY --from=builder --chown=starmap:starmap \
-     /build/target/starmap-1.0.0.jar app.jar
+     /build/target/starmap-*.jar app.jar
 
 COPY --from=orekit-prep --chown=starmap:starmap /prep/orekit-data ./orekit-data
 

@@ -22,6 +22,21 @@ jobs:
           java-version: '25'
           cache: maven
 
+      - name: Validate release tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          POM_VERSION="$(python3 -c 'import xml.etree.ElementTree as ET; ns={"m":"http://maven.apache.org/POM/4.0.0"}; print(ET.parse("pom.xml").findtext("m:version", namespaces=ns))')"
+          if [[ "$VERSION" != "$POM_VERSION" ]]; then
+            echo "Release tag version $VERSION does not match pom.xml version $POM_VERSION." >&2
+            exit 1
+          fi
+
+          git fetch origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD; then
+            echo "Refusing to release a tag that is not on main." >&2
+            exit 1
+          fi
+
       - name: Verify release
         run: mvn -B verify
 
@@ -29,9 +44,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          git fetch origin main
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD; then
-            echo "Refusing to release a tag that is not on main." >&2
-            exit 1
-          fi
-          gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag
+          VERSION="${GITHUB_REF_NAME#v}"
+          JAR="target/starmap-${VERSION}.jar"
+          SBOM="target/starmap-${VERSION}-sbom.json"
+          CHECKSUMS="target/starmap-${VERSION}-checksums.txt"
+          test -f "$JAR"
+          cp target/classes/META-INF/sbom/application.cdx.json "$SBOM"
+          (
+            cd target
+            sha256sum "starmap-${VERSION}.jar" "starmap-${VERSION}-sbom.json" > "starmap-${VERSION}-checksums.txt"
+          )
+          gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag "$JAR" "$SBOM" "$CHECKSUMS"

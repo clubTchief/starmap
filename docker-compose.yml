@@ -12,6 +12,7 @@ services:
       OBSERVER_DEFAULT_ALT: "14.0"
       SAT_TRACK_NORAD_IDS: "25544"         # ISS; comma-separate more IDs
       JAVA_OPTS: "-Xms256m -Xmx768m"
+      STARMAP_ALLOW_ANONYMOUS_WRITES: "true" # local-only convenience
     volumes:
       # Persist the satellite OMM cache so CelesTrak isn't re-fetched on restart
       - sat-cache:/app/sat-cache
