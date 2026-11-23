@@ -74,6 +74,12 @@ The browser smoke tests verify that frame, star, and satellite controls and hand
 
 Create a `v*` tag on `main` whose version matches the project version in `pom.xml` (for example, `v1.0.0`). The release workflow verifies the application and publishes the versioned JAR, a CycloneDX JSON SBOM, and a SHA-256 checksum manifest alongside the generated release notes.
 
+### v1.0.0 changes
+
+- Protected observer and satellite write actions with Google Sign-In and an exact email allowlist; public reads remain open, and non-browser clients can use the server-side API key.
+- Added the Google sign-in control to the top mode bar so it remains visible.
+- Added release checks that ensure tags match the project version and point to `main`, plus a versioned JAR, CycloneDX SBOM, and SHA-256 checksums.
+
 ## Configuration
 
 Spring Boot properties can be overridden with environment variables:
