@@ -293,6 +293,17 @@
     #topbar-right {
       margin-left: auto; display: flex; align-items: center; gap: 20px; padding: 0 20px;
     }
+    #auth-widget {
+      display: flex; align-items: center; gap: 8px; color: var(--muted);
+      font-size: 9px; letter-spacing: .5px;
+    }
+    #auth-widget[hidden], #auth-signout[hidden] { display: none; }
+    #auth-status { max-width: 260px; }
+    #auth-signout {
+      background: transparent; border: 1px solid var(--border); border-radius: 3px;
+      color: var(--muted); cursor: pointer; font-family: var(--mono);
+      font-size: 9px; padding: 6px 8px;
+    }
     #clock { font-size: 13px; font-weight: 700; color: var(--m1); letter-spacing: 2px; }
     #observer-display { font-size: 10px; color: var(--muted); }
 

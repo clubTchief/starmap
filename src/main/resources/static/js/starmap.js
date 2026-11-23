@@ -1,5 +1,118 @@
 'use strict';
 
+let googleClientId = '';
+let googleIdToken = null;
+
+function setAuthStatus(message) {
+  const status = document.getElementById('auth-status');
+  if (status) {
+    status.textContent = message;
+    status.hidden = false;
+  }
+}
+
+function handleGoogleSignIn(response) {
+  if (!response?.credential) {
+    setAuthStatus('Google sign-in did not complete. Please try again.');
+    return;
+  }
+
+  googleIdToken = response.credential;
+  document.getElementById('google-signin-button').hidden = true;
+  document.getElementById('auth-signout').hidden = false;
+  setAuthStatus('Signed in. Write permission is checked when you make changes.');
+}
+
+function clearGoogleSignIn() {
+  googleIdToken = null;
+  window.google?.accounts?.id?.disableAutoSelect();
+  document.getElementById('google-signin-button').hidden = false;
+  document.getElementById('auth-signout').hidden = true;
+  setAuthStatus('Sign in with an approved Google account to make changes.');
+}
+
+function reportWriteError(error) {
+  console.warn('Write request failed:', error);
+  const message = error?.message || 'Write request failed.';
+  if (googleClientId) {
+    setAuthStatus(message);
+  } else {
+    alert(message);
+  }
+}
+
+async function writeRequest(url, options = {}) {
+  const headers = new Headers(options.headers || {});
+  if (googleIdToken) {
+    headers.set('Authorization', `Bearer ${googleIdToken}`);
+  }
+
+  const response = await fetch(url, { ...options, headers });
+  if (!response.ok) {
+    const message = response.status === 401
+      ? googleClientId
+        ? 'Sign in with an approved Google account to make changes.'
+        : 'Write access is unavailable in this browser. Contact the site administrator.'
+      : `Write request failed (${response.status}).`;
+    if (response.status === 401 && googleClientId) {
+      clearGoogleSignIn();
+    }
+    throw new Error(message);
+  }
+  return response;
+}
+
+async function initializeGoogleAuth() {
+  const widget = document.getElementById('auth-widget');
+  if (!widget) return;
+
+  try {
+    const response = await fetch('/api/auth/config');
+    if (!response.ok) {
+      throw new Error(`Authentication configuration request failed (${response.status}).`);
+    }
+    const config = await response.json();
+    if (!config.googleClientId) return;
+
+    googleClientId = config.googleClientId;
+    widget.hidden = false;
+    setAuthStatus('Sign in with an approved Google account to make changes.');
+    document.getElementById('auth-signout').addEventListener('click', clearGoogleSignIn);
+
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = () => {
+      if (!window.google?.accounts?.id) {
+        setAuthStatus('Google Sign-In could not be initialized. Reload the page to retry.');
+        return;
+      }
+      window.google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: handleGoogleSignIn,
+        auto_select: false,
+      });
+      window.google.accounts.id.renderButton(
+        document.getElementById('google-signin-button'),
+        { theme: 'outline', size: 'small' },
+      );
+    };
+    script.onerror = () => setAuthStatus('Google Sign-In failed to load. Check your connection and reload.');
+    document.head.appendChild(script);
+  } catch (error) {
+    console.warn('Unable to initialize Google Sign-In:', error);
+    widget.hidden = false;
+    setAuthStatus('Authentication configuration could not be loaded. Reload the page to retry.');
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializeGoogleAuth, { once: true });
+} else {
+  initializeGoogleAuth();
+}
+
 // ── Frame mode metadata ──────────────────────────────────────────────────────
 const FRAME_META = {
   0: { name:'GNSS / Ground',             accent:'#00e5ff', origin:'Earth', frame:'WGS-84',           posKey:null },
@@ -1688,8 +1801,9 @@ function updateLeftFrameTab(label, accent, k1,v1,k2,v2,k3,v3,k4,v4) {
 function addSatFromInput() {
   const id = parseInt(document.getElementById('norad-input').value);
   if (!isNaN(id) && id > 0) {
-    fetch(`/api/sat/add?noradId=${id}`, {method:'POST'}).catch(console.warn);
-    document.getElementById('norad-input').value = '';
+    writeRequest(`/api/sat/add?noradId=${id}`, { method: 'POST' })
+      .then(() => { document.getElementById('norad-input').value = ''; })
+      .catch(reportWriteError);
   }
 }
 
@@ -2000,34 +2114,34 @@ document.getElementById('btn-issfly').addEventListener('click', () => {
 function satAddFromInput() {
   const val = parseInt(document.getElementById('sat-norad-input').value);
   if (!val || val < 1) { alert('Enter a valid NORAD ID.'); return; }
-  fetch(`/api/sat/add?noradId=${val}`, { method: 'POST' })
+  writeRequest(`/api/sat/add?noradId=${val}`, { method: 'POST' })
     .then(r => r.json())
     .then(d => { console.log('Added satellite:', d); })
-    .catch(e => alert('Error adding satellite: ' + e));
+    .catch(reportWriteError);
 }
 
 function satRemove(noradId) {
-  // Remove from globe
-  const reg = satRegistry[noradId];
-  if (reg) {
-    viewer.entities.remove(reg.entity);
-    reg.trackEntities.forEach(e => viewer.entities.remove(e));
-    if (reg.footEntity)  viewer.entities.remove(reg.footEntity);
-    if (reg.footOutline) viewer.entities.remove(reg.footOutline);
-    delete satRegistry[noradId];
-  }
-  // Remove card
-  const card = document.getElementById(`sat-card-${noradId}`);
-  if (card) card.remove();
-  // Tell backend
-  fetch(`/api/sat/remove?noradId=${noradId}`, { method: 'DELETE' }).catch(() => {});
-  if (issChaseActive && chasedNoradId === noradId) exitIssChase();
+  writeRequest(`/api/sat/remove?noradId=${noradId}`, { method: 'DELETE' })
+    .then(() => {
+      const reg = satRegistry[noradId];
+      if (reg) {
+        viewer.entities.remove(reg.entity);
+        reg.trackEntities.forEach(e => viewer.entities.remove(e));
+        if (reg.footEntity) viewer.entities.remove(reg.footEntity);
+        if (reg.footOutline) viewer.entities.remove(reg.footOutline);
+        delete satRegistry[noradId];
+      }
+      const card = document.getElementById(`sat-card-${noradId}`);
+      if (card) card.remove();
+      if (issChaseActive && chasedNoradId === noradId) exitIssChase();
+    })
+    .catch(reportWriteError);
 }
 
 function satRefresh(noradId) {
-  fetch(`/api/sat/refresh?noradId=${noradId}`, { method: 'POST' })
+  writeRequest(`/api/sat/refresh?noradId=${noradId}`, { method: 'POST' })
     .then(() => console.log('OMM refresh requested for NORAD', noradId))
-    .catch(e => console.warn('Refresh failed:', e));
+    .catch(reportWriteError);
 }
 
 // ── OMM display formatter ─────────────────────────────────────────────────
@@ -3949,24 +4063,26 @@ function applyObserver() {
   const lon  = parseFloat(document.getElementById('obs-lon').value);
   const alt  = parseFloat(document.getElementById('obs-alt').value) || 0;
   const city = document.getElementById('obs-city').value;
-  fetch(`/api/observer?lat=${lat}&lon=${lon}&alt=${alt}&city=${encodeURIComponent(city)}`,
-    { method: 'PUT' }).catch(console.warn);
-  document.getElementById('obs-panel').classList.remove('visible');
+  writeRequest(`/api/observer?lat=${lat}&lon=${lon}&alt=${alt}&city=${encodeURIComponent(city)}`,
+    { method: 'PUT' })
+    .then(() => document.getElementById('obs-panel').classList.remove('visible'))
+    .catch(reportWriteError);
 }
 
 function requestBrowserGeo() {
   if (!navigator.geolocation) { alert('Geolocation not supported'); return; }
   navigator.geolocation.getCurrentPosition(pos => {
     const { latitude: lat, longitude: lon, altitude: alt } = pos.coords;
-    fetch(`/api/observer/geo?lat=${lat}&lon=${lon}&alt=${alt||0}`, { method: 'POST' })
-      .catch(console.warn);
-    // Update observer inputs if panel exists
-    const _ol = document.getElementById('obs-lat');
-    const _on = document.getElementById('obs-lon');
-    const _oa = document.getElementById('obs-alt');
-    if (_ol) _ol.value = lat.toFixed(6);
-    if (_on) _on.value = lon.toFixed(6);
-    if (alt && _oa) _oa.value = Math.round(alt);
+    writeRequest(`/api/observer/geo?lat=${lat}&lon=${lon}&alt=${alt||0}`, { method: 'POST' })
+      .then(() => {
+        const _ol = document.getElementById('obs-lat');
+        const _on = document.getElementById('obs-lon');
+        const _oa = document.getElementById('obs-alt');
+        if (_ol) _ol.value = lat.toFixed(6);
+        if (_on) _on.value = lon.toFixed(6);
+        if (alt && _oa) _oa.value = Math.round(alt);
+      })
+      .catch(reportWriteError);
   }, err => alert('Geolocation failed: ' + err.message));
 }
 
