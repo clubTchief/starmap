@@ -64,34 +64,34 @@
     <dependency>
       <groupId>org.orekit</groupId>
       <artifactId>orekit</artifactId>
-      <version>13.1.7</version>
+      <version>13.1.10</version>
     </dependency>
 
     <!-- Hipparchus — required by Orekit -->
     <dependency>
       <groupId>org.hipparchus</groupId>
       <artifactId>hipparchus-core</artifactId>
-      <version>4.0.3</version>
+      <version>4.1</version>
     </dependency>
     <dependency>
       <groupId>org.hipparchus</groupId>
       <artifactId>hipparchus-geometry</artifactId>
-      <version>4.0.3</version>
+      <version>4.1</version>
     </dependency>
     <dependency>
       <groupId>org.hipparchus</groupId>
       <artifactId>hipparchus-ode</artifactId>
-      <version>4.0.3</version>
+      <version>4.1</version>
     </dependency>
     <dependency>
       <groupId>org.hipparchus</groupId>
       <artifactId>hipparchus-fitting</artifactId>
-      <version>4.0.3</version>
+      <version>4.1</version>
     </dependency>
     <dependency>
       <groupId>org.hipparchus</groupId>
       <artifactId>hipparchus-stat</artifactId>
-      <version>4.0.3</version>
+      <version>4.1</version>
     </dependency>
   </dependencies>
 
