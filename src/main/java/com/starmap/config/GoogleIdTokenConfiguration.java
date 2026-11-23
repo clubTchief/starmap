@@ -27,13 +27,17 @@ public class GoogleIdTokenConfiguration {
     @Bean
     JwtDecoder googleIdTokenDecoder(@Value("${starmap.auth.google.client-id:}") String clientId) {
         NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(GOOGLE_JWK_SET_URI).build();
-        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
+        decoder.setJwtValidator(googleIdTokenValidator(clientId.trim()));
+        return decoder;
+    }
+
+    static OAuth2TokenValidator<Jwt> googleIdTokenValidator(String clientId) {
+        return new DelegatingOAuth2TokenValidator<>(
             JwtValidators.createDefault(),
             requiredClaimsValidator(),
             issuerValidator(),
-            audienceValidator(clientId.trim())
-        ));
-        return decoder;
+            audienceValidator(clientId)
+        );
     }
 
     static OAuth2TokenValidator<Jwt> requiredClaimsValidator() {
