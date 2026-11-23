@@ -54,8 +54,8 @@ public class StarmapController {
      * frontend itself from frameContext.lstDeg + observer.latDeg, same
      * pattern the existing celestial grid already uses. Deliberately a
      * plain GET, not SSE: this payload doesn't change tick-to-tick, so
-     * re-sending it every second would cost real Railway egress ($0.05/GB)
-     * for no benefit — a browser fetches this once and caches it.
+     * re-sending it every second would waste bandwidth — a browser fetches
+     * this once and caches it.
      *
      * Star data: HYG Database v4.1, astronexus, CC BY-SA 4.0.
      */
@@ -76,7 +76,7 @@ public class StarmapController {
         return emitter;
     }
 
-    /** Honors X-Forwarded-For when present (Railway sits behind a proxy),
+    /** Honors X-Forwarded-For when provided by a reverse proxy,
      *  falling back to the direct remote address otherwise. */
     private String clientIp(HttpServletRequest request) {
         String forwarded = request.getHeader("X-Forwarded-For");
