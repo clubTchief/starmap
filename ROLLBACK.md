@@ -1,52 +1,66 @@
-# STARMAP — Rollback Runbook
+# STARMAP - Cloud Run Rollback Runbook
 [![Uptime check](https://github.com/clubTchief/starmap/actions/workflows/uptime-check.yml/badge.svg)](https://github.com/clubTchief/starmap/actions/workflows/uptime-check.yml)
 [![Deploy to Cloud Run](https://github.com/clubTchief/starmap/actions/workflows/deploy-cloud-run.yml/badge.svg)](https://github.com/clubTchief/starmap/actions/workflows/deploy-cloud-run.yml)
 
-If a deploy goes wrong, follow this rather than debugging live in production.
+Use this runbook to restore the last healthy Cloud Run revision. Cloud Run revisions are immutable, so rollback switches traffic to a known-good revision without rebuilding an image.
 
-## 1. Confirm it's actually broken
+## 1. Confirm the incident
 
-- Check `https://starmap-production-fbf2.up.railway.app/actuator/health` — if it doesn't return `{"status":"UP"}`, that's real.
-- Check Railway → `starmap` service → Deploy Logs for the current deployment for errors.
-- Open the app itself and confirm the globe/GNSS panel are actually broken, not just slow to load.
+- Check `https://tiara.club/actuator/health` and `https://www.tiara.club/actuator/health`; a healthy response includes `"status":"UP"`.
+- Check the **Deploy to Cloud Run** workflow in GitHub Actions for the latest deployment result and logs.
+- Confirm the issue in the application before changing production traffic.
 
-## 2. Find the last known-good image tag
+## 2. Identify a known-good revision
 
-Every CI build publishes an immutable `:<commit-sha>` tag to GHCR, in addition to `:latest` and `:production` — these are never deleted by the cleanup workflow (the last 15 are always retained). To find one:
+List revisions and their readiness, creation time, and image:
 
-- GitHub → **Actions** → **Build and publish Docker image** → find the most recent run that was known to work (check the commit message/date), and copy its commit SHA.
-- Or: `https://github.com/clubTchief/starmap/pkgs/container/starmap` → browse tags directly by date.
-
-## 3. Roll back the running image
-
-In Railway → `starmap` service → **Settings → Source**, change the image reference from `:production` to the specific known-good tag:
-
-```
-ghcr.io/clubtchief/starmap:<last-good-commit-sha>
+```powershell
+gcloud run revisions list `
+  --service=starmap `
+  --region=europe-west1 `
+  --project=maps-31544 `
+  --format="table(metadata.name,status.conditions[0].status,metadata.creationTimestamp,spec.containers[0].image)"
 ```
 
-Save — this triggers an immediate redeploy of that exact image.
+Choose a previous revision that was serving successfully before the incident. Record its full revision name (for example, `starmap-00009-abc`). To inspect its details:
 
-**Do not just click "Redeploy" on `:production`** — that re-pulls whatever is currently at that tag, which is the broken one.
-
-## 4. Fix forward, don't leave it pinned
-
-Once you've rolled back, `:production` still points at the broken build. Fix the actual issue on `main`, push, let CI rebuild and republish `:production`, confirm it's healthy, **then** switch Railway's Source back from the pinned SHA to `:production` so future automated redeploys resume working normally.
-
-## 5. Revert the source too
-
-```
-git revert <bad-commit-sha>
-git push
+```powershell
+gcloud run revisions describe REVISION_NAME `
+  --region=europe-west1 `
+  --project=maps-31544
 ```
 
-This keeps `main`'s history consistent with what's actually running, rather than leaving `main` ahead of production with a known-broken commit sitting in it.
+## 3. Send production traffic to the known-good revision
+
+Replace `REVISION_NAME` with the revision selected above:
+
+```powershell
+gcloud run services update-traffic starmap `
+  --region=europe-west1 `
+  --project=maps-31544 `
+  --to-revisions=REVISION_NAME=100
+```
+
+Verify the service's traffic allocation and health:
+
+```powershell
+gcloud run services describe starmap `
+  --region=europe-west1 `
+  --project=maps-31544 `
+  --format="yaml(status.url,status.traffic,status.latestReadyRevisionName)"
+
+curl.exe -fsS https://tiara.club/actuator/health
+```
+
+## 4. Fix forward
+
+A rollback only changes traffic; it does not revert source code. Fix the issue on a branch and merge it to `main`. Changes to application, Docker, Orekit data, or deployment workflow files run verification and deploy a new revision. Documentation-only changes do not trigger a Cloud Run deployment. The deployment workflow can also be started manually from GitHub Actions.
 
 ## Quick reference
 
 | Situation | Action |
 |---|---|
-| App down, need it back *now* | Pin Railway to last-good `:<sha>` tag (step 3) |
-| Have time to investigate | Check Deploy Logs first, compare against the "Where Things Stood at the Last Successful Build" section of the Development Flow document |
-| Root cause found and fixed | Push fix to `main`, wait for CI, confirm health, unpin Railway back to `:production` |
-| CI itself is broken (not the app) | The automated redeploy won't fire — you'll need to redeploy manually via Railway's dashboard once GHCR has a working image |
+| Application is unhealthy | Check the deployment workflow and Cloud Run revision logs |
+| Need immediate recovery | Set 100% traffic to a known-good revision (step 3) |
+| Fixed the root cause | Merge the fix to `main` and verify the new revision |
+| Build/deployment workflow failed before deployment | Review the workflow logs; the previous Cloud Run revision should remain available |

@@ -20,6 +20,6 @@ The application runs at <http://localhost:8080>. Its health endpoint is <http://
 
 ## Deployment
 
-Production runs on [Google Cloud Run](https://starmap-tvyqcsjjqq-ew.a.run.app) in `europe-west1`. Each push to `main` runs Maven verification, builds and pushes the container image, and deploys the service.
+Production runs on [Google Cloud Run](https://tiara.club) in `europe-west1`. Changes to application, Docker, Orekit data, or deployment workflow files on `main` run Maven verification and deploy a new revision. Documentation-only changes do not trigger deployment; the workflow can also be started manually from GitHub Actions.
 
 GitHub tracks these deployments under the `cloud-run-production` environment. The scheduled uptime workflow checks `/actuator/health` every 15 minutes.

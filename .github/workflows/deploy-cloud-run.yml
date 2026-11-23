@@ -2,6 +2,14 @@ name: Deploy to Cloud Run
 on:
   push:
     branches: [main]
+    paths:
+      - '.dockerignore'
+      - '.gitattributes'
+      - '.github/workflows/deploy-cloud-run.yml'
+      - 'Dockerfile'
+      - 'orekit-data/**'
+      - 'pom.xml'
+      - 'src/**'
   workflow_dispatch:
 
 concurrency:
