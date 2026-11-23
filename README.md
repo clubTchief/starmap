@@ -84,7 +84,9 @@ Create a `v*` tag on `main` whose version matches the project version in `pom.xm
 
 Spring Boot properties can be overridden with environment variables:
 
-| Environment variable | Purpose | Default |
+The table lists application defaults only; it does not report the values configured on the production Cloud Run service. Production settings can differ from these defaults.
+
+| Environment variable | Purpose | Application default |
 | --- | --- | --- |
 | `GPS_SIMULATE` | Use simulated GPS instead of a serial receiver | `false` |
 | `GPS_SERIAL_PORT` | GPS receiver serial port | `COM8` |
@@ -105,7 +107,16 @@ gcloud run services update starmap --region europe-west1 \
   --update-env-vars="^:^STARMAP_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com:STARMAP_ALLOWED_EMAILS=you@example.com,another@example.com"
 ```
 
-Add `http://localhost:8080` as an authorized origin for local sign-in. To explicitly allow anonymous writes in an isolated local instance, set `STARMAP_ALLOW_ANONYMOUS_WRITES=true`. Keep `STARMAP_API_KEY` server-side and never commit it.
+Add `http://localhost:8080` as an authorized origin for local sign-in. To explicitly allow anonymous writes in an isolated local instance, set `STARMAP_ALLOW_ANONYMOUS_WRITES=true`.
+
+For non-browser API access, store `STARMAP_API_KEY` in Google Secret Manager instead of passing its value with `--update-env-vars`. Grant the Cloud Run service identity the Secret Manager Secret Accessor role for the secret, then map it to the container environment:
+
+```bash
+gcloud run services update starmap --region europe-west1 \
+  --update-secrets=STARMAP_API_KEY=starmap-api-key:latest
+```
+
+Never commit or expose the API key in browser code.
 
 ## Troubleshooting
 

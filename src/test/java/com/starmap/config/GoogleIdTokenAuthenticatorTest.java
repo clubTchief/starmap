@@ -11,6 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class GoogleIdTokenAuthenticatorTest {
@@ -34,6 +35,16 @@ class GoogleIdTokenAuthenticatorTest {
     void requiresAnEmailAllowlistWhenGoogleSignInIsEnabled() {
         assertThrows(IllegalStateException.class,
             () -> new GoogleIdTokenAuthenticator("web-client-id", "", jwtDecoder));
+    }
+
+    @Test
+    void disablesGoogleSignInWhenClientIdIsUnset() {
+        GoogleIdTokenAuthenticator authenticator =
+            new GoogleIdTokenAuthenticator("", "", jwtDecoder);
+
+        assertFalse(authenticator.isEnabled());
+        assertFalse(authenticator.isAuthorized("id-token"));
+        verifyNoInteractions(jwtDecoder);
     }
 
     @Test
@@ -68,6 +79,24 @@ class GoogleIdTokenAuthenticatorTest {
 
         assertFalse(validator.validate(token("admin@example.com", true)).hasErrors());
         assertTrue(validator.validate(incompleteToken).hasErrors());
+    }
+
+    @Test
+    void rejectsExpiredTokensWithTheConfiguredGoogleValidators() {
+        var validator = GoogleIdTokenConfiguration.googleIdTokenValidator("web-client-id");
+        Instant now = Instant.now();
+        Jwt expiredToken = Jwt.withTokenValue("expired")
+            .header("alg", "RS256")
+            .claim("email", "admin@example.com")
+            .claim("email_verified", true)
+            .audience(List.of("web-client-id"))
+            .issuer("https://accounts.google.com")
+            .subject("user-123")
+            .issuedAt(now.minusSeconds(600))
+            .expiresAt(now.minusSeconds(300))
+            .build();
+
+        assertTrue(validator.validate(expiredToken).hasErrors());
     }
 
     private static Jwt token(String email, boolean emailVerified) {
