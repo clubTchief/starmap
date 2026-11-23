@@ -40,6 +40,10 @@ test('serves reference-frame, star, and satellite controls', async () => {
     assert.ok(html.includes('id="sat-selector"'), 'satellite selector should be present');
     assert.ok(html.includes('value="25544"'), 'ISS should be selected by default');
     assert.ok(html.includes('id="auth-widget"'), 'browser sign-in controls should be present');
+    assert.ok(
+      await page.$eval('#mode-bar', modeBar => !!modeBar.querySelector('#auth-widget')),
+      'sign-in controls should be in the visible top bar layer',
+    );
 
     const scriptResponse = await page.goto(new URL('/js/starmap.js', appUrl), {
       waitUntil: 'domcontentloaded',
@@ -63,6 +67,34 @@ test('serves public authentication configuration without exposing the email allo
     const config = JSON.parse(await response.text());
     assert.equal(typeof config.googleClientId, 'string');
     assert.ok(!('allowedEmails' in config), 'authorized account emails must remain server-side');
+  } finally {
+    await page.close();
+  }
+});
+
+test('sign-in widget is visible above the mode bar when enabled', async () => {
+  const { page } = await openPage();
+  try {
+    const layout = await page.$eval('#auth-widget', widget => {
+      widget.hidden = false;
+      document.getElementById('auth-status').textContent = 'Sign in with an approved Google account.';
+      const googleButton = document.getElementById('google-signin-button');
+      googleButton.style.width = '136px';
+      googleButton.style.height = '20px';
+
+      const bounds = widget.getBoundingClientRect();
+      const topElement = document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+      return {
+        display: getComputedStyle(widget).display,
+        width: bounds.width,
+        height: bounds.height,
+        topmost: widget.contains(topElement),
+      };
+    });
+
+    assert.equal(layout.display, 'flex');
+    assert.ok(layout.width > 0 && layout.height > 0, 'enabled sign-in widget should occupy visible space');
+    assert.ok(layout.topmost, 'the mode bar should not cover the sign-in widget');
   } finally {
     await page.close();
   }

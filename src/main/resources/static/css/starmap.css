@@ -297,6 +297,9 @@
       display: flex; align-items: center; gap: 8px; color: var(--muted);
       font-size: 9px; letter-spacing: .5px;
     }
+    #mode-bar > #auth-widget {
+      position: absolute; top: 14px; right: 16px; z-index: 1;
+    }
     #auth-widget[hidden], #auth-signout[hidden] { display: none; }
     #auth-status { max-width: 260px; }
     #auth-signout {
