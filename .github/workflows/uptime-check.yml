@@ -2,7 +2,7 @@ name: Uptime check
 
 # Runs on GitHub's own schedule, independent of any deploy — this is the
 # thing that answers "did anyone notice the app went down" without a
-# person having to remember to look at Railway logs.
+# person having to remember to look at Cloud Run logs.
 #
 # A failed run triggers GitHub's default email notification to the repo
 # owner/watchers — no external service or webhook needed to get started.
