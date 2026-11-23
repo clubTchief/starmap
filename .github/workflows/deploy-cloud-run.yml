@@ -89,16 +89,24 @@ jobs:
           print("Health endpoint is UP")
           ' <<<"$health"
 
-          status="$(curl --fail --silent --show-error --retry 6 --retry-all-errors \
-            --retry-delay 5 --max-time 30 "$SERVICE_URL/api/status")"
-          python3 -c '
+          status_ready=false
+          for attempt in {1..12}; do
+            if status="$(curl --fail --silent --show-error --max-time 30 "$SERVICE_URL/api/status")" \
+              && python3 -c '
           import json, sys
           data = json.load(sys.stdin)
           required = {"gpsSimulating", "ephemerisReady", "trackedSats", "observer"}
           missing = required - data.keys()
-          if missing:
-              raise SystemExit(f"Missing status fields: {sorted(missing)}")
-          if data["ephemerisReady"] is not True:
-              raise SystemExit("Ephemeris is not ready")
-          print("Application status endpoint is ready")
-          ' <<<"$status"
+          sys.exit(0 if not missing and data["ephemerisReady"] is True else 1)
+          ' <<<"$status"; then
+              status_ready=true
+              break
+            fi
+            sleep 5
+          done
+
+          if [[ "$status_ready" != true ]]; then
+            echo "::error::Application status did not become ready after deployment"
+            exit 1
+          fi
+          echo "Application status endpoint is ready"

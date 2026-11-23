@@ -21,6 +21,7 @@ STARMAP is an interactive geospatial and astrodynamics visualization app that co
 
 - Java 25
 - Maven
+- Node.js 24 for browser smoke tests
 - Internet access for CesiumJS map assets and satellite data
 
 ### Start with simulated GPS

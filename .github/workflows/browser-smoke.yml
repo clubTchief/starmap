@@ -47,7 +47,10 @@ jobs:
           for attempt in {1..60}; do
             if curl --fail --silent http://127.0.0.1:8080/actuator/health \
                 -o /tmp/starmap-health.json \
-              && python3 -c 'import json; import sys; sys.exit(0 if json.load(open(sys.argv[1])).get("status") == "UP" else 1)' /tmp/starmap-health.json; then
+              && python3 -c 'import json; import sys; sys.exit(0 if json.load(open(sys.argv[1])).get("status") == "UP" else 1)' /tmp/starmap-health.json \
+              && curl --fail --silent http://127.0.0.1:8080/api/status \
+                -o /tmp/starmap-status.json \
+              && python3 -c 'import json; import sys; data=json.load(open(sys.argv[1])); sys.exit(0 if data.get("ephemerisReady") is True and 25544 in data.get("trackedSats", []) else 1)' /tmp/starmap-status.json; then
               echo "STARMAP is ready"
               exit 0
             fi
