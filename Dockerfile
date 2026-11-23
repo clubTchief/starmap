@@ -8,40 +8,22 @@ FROM alpine:3.19 AS orekit-prep
 WORKDIR /prep
 RUN apk add --no-cache wget
 
-# The vendored orekit-data/ folder is real and correct for almost everything
-# (DE440 ephemeris, EOP, gravity field, space weather, MSAFE) — those are
-# plain git blobs. But four files are Git-LFS-tracked (see .gitattributes:
-# *.bsp, *.dat, *.tab, *.ecsv) and Railway's build clone does not resolve
-# LFS pointers, so tai-utc.dat / de421.bsp / de440.bsp /
-# fes2004_Cnm-Snm.dat land in the image as ~130-byte pointer stubs, not
-# real data. (A GitLab archive re-download hits the exact same problem —
-# GitLab doesn't include LFS objects in generated archives either.)
+# The vendored orekit-data/ folder contains the DE440 ephemeris, EOP,
+# gravity field, space weather, and MSAFE. Some of its Git-LFS-tracked files
+# can be checked out as pointer stubs when LFS objects are unavailable.
 #
 # de421.bsp / de440.bsp / fes2004_Cnm-Snm.dat aren't needed: planetary
 # positions come from the already-real DE-440-ephemerides/*.440 file, and
 # this app never loads an ocean tide model. tai-utc.dat (leap seconds) IS
 # needed, so we drop the broken stub and fetch Orekit's other supported
 # leap-second format straight from its IERS source of truth instead.
-# Cache-buster: Railway injects the current commit SHA as this build arg
-# when it's declared. Referencing it below means every commit produces a
-# genuinely new layer here, so a stale/corrupted cache entry can never be
-# silently reused for this step or anything after it (this is what bit us
-# on an earlier deploy — the rm+wget layer got served from an old cached
-# build).
-ARG RAILWAY_GIT_COMMIT_SHA=local
-RUN echo "Building orekit-data for commit ${RAILWAY_GIT_COMMIT_SHA}"
-
 COPY orekit-data ./orekit-data-raw
 
 # We tried deleting the four Git-LFS-broken stub files (tai-utc.dat,
 # de421.bsp, de440.bsp, fes2004_Cnm-Snm.dat) out of the copied tree with
-# `rm -f`, and verified across four different build environments (Railway
-# cached, Railway with a cache-busting ARG, GitHub Actions with
-# --no-cache, and a pinned immutable commit-SHA image) that the deletion
-# never actually stuck in the final image — every one of them still had
-# the broken files at runtime, right alongside files added in the very
-# same RUN step. Rather than keep chasing why `rm` doesn't survive into
-# the exported layer, we sidestep it entirely: build a brand new
+# `rm -f`, and verified in cached and uncached container builds that the
+# deletion did not reliably remove the files from the final image.
+# Rather than rely on deleting them, build a brand new
 # orekit-data directory containing ONLY the pieces we've confirmed are
 # real and needed, so the broken files are simply never copied into it
 # in the first place.

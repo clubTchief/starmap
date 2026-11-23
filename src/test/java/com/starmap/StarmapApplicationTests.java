@@ -26,7 +26,7 @@ class StarmapApplicationTests {
     void contextLoads() {
         // If the application context fails to start — including any
         // @DependsOn ordering problem, missing Orekit data, or a broken
-        // bean wiring — this test fails and the build stops here, before
-        // a broken image ever reaches GHCR or Railway.
+        // bean wiring — this test fails and the build stops before a broken
+        // image is deployed.
     }
 }

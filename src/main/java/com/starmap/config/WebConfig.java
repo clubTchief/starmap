@@ -12,10 +12,10 @@ import org.springframework.web.servlet.config.annotation.*;
 public class WebConfig implements WebMvcConfigurer {
 
     // Was allowedOriginPatterns("*") — fine for local dev, unnecessarily
-    // open on a public deployment. Defaults to the app's own Railway URL
-    // plus localhost for local development; override via
+    // open on a public deployment. Defaults to the production domains plus
+    // localhost for local development; override via
     // starmap.cors.allowed-origins for any other frontend that needs access.
-    @Value("${starmap.cors.allowed-origins:https://starmap-production-fbf2.up.railway.app,http://localhost:8080,http://localhost:3000}")
+    @Value("${starmap.cors.allowed-origins:https://tiara.club,https://www.tiara.club,https://starmap-tvyqcsjjqq-ew.a.run.app,http://localhost:8080,http://localhost:3000}")
     private String allowedOrigins;
 
     @Override

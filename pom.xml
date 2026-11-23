@@ -32,8 +32,7 @@
     </dependency>
     <!-- Actuator — /actuator/health and /actuator/metrics for real
          observability (SSE connection count, JVM memory, request latency)
-         instead of only finding out something's wrong from Railway logs
-         after the fact. -->
+         so production issues are easier to diagnose. -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-actuator</artifactId>

@@ -2370,9 +2370,8 @@ function toggleSkyView() {
 // pattern the existing celestial RA/Dec grid already uses (buildGrid()
 // does its own spherical math from gmstDeg rather than having the server
 // pre-project points). Doing this server-side and re-sending ~8,900 stars
-// over SSE every second was costed at roughly $80/month in Railway egress
-// per continuously-connected client — this design has zero ongoing cost
-// beyond the one-time ~500KB fetch, cached by the browser thereafter.
+// over SSE every second would waste significant bandwidth — this design
+// needs only the one-time ~500KB fetch, cached by the browser thereafter.
 let starCatalogue     = [];     // raw {hip, proper, raRad, decRad, mag, ci}
 let starsVisible      = false;
 let starCollection    = null;   // Cesium.PointPrimitiveCollection, created lazily
