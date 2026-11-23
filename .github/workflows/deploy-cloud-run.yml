@@ -18,6 +18,9 @@ env:
 
 jobs:
   deploy:
+    environment:
+      name: cloud-run-production
+      url: https://starmap-tvyqcsjjqq-ew.a.run.app
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
